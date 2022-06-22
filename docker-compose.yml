@@ -1,0 +1,15 @@
+version: '3'
+services:
+  tests: &tests
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - STORAGE_API_URL=https://connection.keboola.com
+      - STORAGE_API_TOKEN
+    command: ["composer", "ci"]
+
+  dev:
+    <<: *tests
+    volumes:
+      - ./:/code

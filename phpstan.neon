@@ -1,0 +1,6 @@
+parameters:
+    checkMissingIterableValueType: false
+    ignoreErrors:
+
+includes:
+    - vendor/phpstan/phpstan-phpunit/extension.neon
