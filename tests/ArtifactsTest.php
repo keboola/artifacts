@@ -11,25 +11,25 @@ use Keboola\StorageApi\Options\ListFilesOptions;
 use Keboola\Temp\Temp;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\Test\TestLogger;
+use Symfony\Component\Filesystem\Filesystem as SymfonyFilesystem;
 
 class ArtifactsTest extends TestCase
 {
     public function testUploadCurrent(): void
     {
         $temp = new Temp();
-        $tempDir = $temp->getTmpFolder();
-        $dataDir = $tempDir . '/data';
-        $artifactsFilesystem = new Filesystem($dataDir);
+        $artifactsFilesystem = new Filesystem($temp);
 
         $filePath1 = $artifactsFilesystem->getRunsCurrentDir() . '/file1';
-        $filePath2 = $artifactsFilesystem->getRunsCurrentDir() . '/file2';
+        $filePath2 = $artifactsFilesystem->getRunsCurrentDir() . '/folder/file2';
+        $filesystem = new SymfonyFilesystem();
 
         // create some files
-        file_put_contents($filePath1, json_encode([
+        $filesystem->dumpFile($filePath1, (string) json_encode([
             'foo' => 'bar',
         ]));
 
-        file_put_contents($filePath2, json_encode([
+        $filesystem->dumpFile($filePath2, (string) json_encode([
             'foo' => 'baz',
         ]));
 
@@ -40,7 +40,7 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $storageClient,
             $logger,
-            $dataDir,
+            $temp,
             'keboola.component',
             '123',
             $jobId
@@ -62,7 +62,7 @@ class ArtifactsTest extends TestCase
         $artifactsFilesystem->extractArchive($downloadedArtifactPath, '/tmp');
 
         $file1 = file_get_contents('/tmp/file1');
-        $file2 = file_get_contents('/tmp/file2');
+        $file2 = file_get_contents('/tmp/folder/file2');
         self::assertEquals('{"foo":"bar"}', $file1);
         self::assertEquals('{"foo":"baz"}', $file2);
     }

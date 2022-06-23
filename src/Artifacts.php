@@ -8,6 +8,7 @@ use Keboola\StorageApi\Client as StorageClient;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\FileUploadOptions;
 use Keboola\StorageApi\Options\ListFilesOptions;
+use Keboola\Temp\Temp;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Finder\Finder;
 use Symfony\Component\Process\Exception\ProcessFailedException;
@@ -21,19 +22,17 @@ class Artifacts
     private string $configId;
     private string $jobId;
 
-    private const ARTIFACTS_ARCHIVE_PATH = '/tmp/artefacts.tar.gz';
-
     public function __construct(
         StorageClient $storageClient,
         LoggerInterface $logger,
-        string $dataDir,
+        Temp $temp,
         string $componentId,
         string $configId,
         string $jobId
     ) {
         $this->storageClient = $storageClient;
         $this->logger = $logger;
-        $this->filesystem = new Filesystem($dataDir);
+        $this->filesystem = new Filesystem($temp);
         $this->componentId = $componentId;
         $this->configId = $configId;
         $this->jobId = $jobId;
@@ -51,7 +50,7 @@ class Artifacts
         }
 
         try {
-            $this->filesystem->archiveDir($currentDir, self::ARTIFACTS_ARCHIVE_PATH);
+            $this->filesystem->archiveDir($currentDir, $this->filesystem->getArchivePath());
 
             $options = new FileUploadOptions();
             $options->setTags([
@@ -61,7 +60,7 @@ class Artifacts
                 'jobId-' . $this->jobId,
             ]);
 
-            $fileId = $this->storageClient->uploadFile(self::ARTIFACTS_ARCHIVE_PATH, $options);
+            $fileId = $this->storageClient->uploadFile($this->filesystem->getArchivePath(), $options);
             $this->logger->info(sprintf('Uploaded artifact for job "%s" to file "%s"', $this->jobId, $fileId));
             return $fileId;
         } catch (ProcessFailedException | ClientException $e) {
