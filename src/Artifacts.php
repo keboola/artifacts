@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types = 1);
+declare(strict_types=1);
 
 namespace Keboola\Artifacts;
 
@@ -75,5 +75,4 @@ class Artifacts
         $options->setQuery($query);
         return $this->storageClient->listFiles($options);
     }
-
 }
