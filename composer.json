@@ -25,6 +25,7 @@
     },
     "require-dev": {
         "keboola/coding-standard": "^13.0.0",
+        "keboola/common-exceptions": "^1.2",
         "keboola/php-temp": "^2.0",
         "phpstan/phpstan": "^1.5.0",
         "phpstan/phpstan-phpunit": "^1.0.0",

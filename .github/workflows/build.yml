@@ -12,50 +12,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v1
 
-      - uses: azure/docker-login@v1
-        with:
-          login-server: keboola.azurecr.io
-          username: ${{ secrets.ACR_PULL_USERNAME }}
-          password: ${{ secrets.ACR_PULL_PASSWORD }}
+      - run: docker-compose build
 
-      - run: docker pull waisbrot/wait
-      - run: docker pull keboola.azurecr.io/sandboxes-api
-      - run: docker build -t keboola/sandboxes-api-php-client .
+      - name: Tests
+        run: |
+          docker-compose run --rm tests \
+          -e STORAGE_API_URL \
+          -e STORAGE_API_TOKEN
 
-      - run: |
-          docker run -d --rm --network host -p8080:8080 \
-          -e API_URL=http://localhost:8080 \
-          -e AZURE_CLIENT_ID=233328da-9afe-423b-82c1-915d8c539f71 \
-          -e "AZURE_CLIENT_SECRET=${{ secrets.AZURE_CLIENT_SECRET }}" \
-          -e AZURE_TENANT_ID=9b85ee6f-4fb0-4a46-8cb7-4dcc6b262a89 \
-          -e COSMOS_DB_ID=sandboxes-api \
-          -e COSMOS_ENDPOINT=https://sandboxes-api-testing.documents.azure.com:443 \
-          -e "COSMOS_KEY=${{ secrets.COSMOS_KEY }}" \
-          -e KEYVAULT_KEY_NAME=sandboxes-api-key \
-          -e KEYVAULT_VAULT_NAME=sandboxes-api-ci \
-          -e KBC_URL=https://connection.keboola.com \
-          -e PROVIDER=azure \
-          -e STAGE=dev \
-          -e MLFLOW_STORAGE_ACCOUNT_NAME=abs-account \
-          keboola.azurecr.io/sandboxes-api yarn start
-      - run: |
-          docker run --rm --network host \
-          -e TARGETS=localhost:8080 \
-          -e TIMEOUT=60 \
-          waisbrot/wait
-      - name: Lint code
-        run: |
-          docker run --rm --network host \
-          keboola/sandboxes-api-php-client composer cs
-      - name: Run tests
-        run: |
-          docker run --rm --network host \
-          -e API_URL=http://localhost:8080 \
-          -e KBC_URL=https://connection.keboola.com \
-          -e "KBC_STORAGE_TOKEN=${{ secrets.KBC_STORAGE_TOKEN }}" \
-          -e "KBC_MANAGE_TOKEN=${{ secrets.KBC_MANAGE_TOKEN }}" \
-          -e "KBC_MANAGE_NOTIFY_TOKEN=${{ secrets.KBC_MANAGE_NOTIFY_TOKEN }}" \
-          keboola/sandboxes-api-php-client composer test
       - name: Dump docker logs on failure
         if: failure()
         uses: jwalton/gh-docker-logs@v1

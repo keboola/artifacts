@@ -5,6 +5,7 @@ declare(strict_types = 1);
 namespace Keboola\Artifacts;
 
 use Symfony\Component\Filesystem\Filesystem as SymfonyFilesystem;
+use Symfony\Component\Process\Process;
 
 class Filesystem
 {
@@ -30,6 +31,19 @@ class Filesystem
     public function getRunsCurrentDir(): string
     {
         return $this->runsCurrentDir;
+    }
+
+    public function archiveDir(string $sourcePath, string $targetPath): void
+    {
+        $process = new Process([
+            'tar',
+            '-C',
+            $sourcePath,
+            '-czvf',
+            $targetPath,
+            '.',
+        ]);
+        $process->mustRun();
     }
 
     private function mkdir(string $path): void
