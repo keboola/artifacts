@@ -131,6 +131,8 @@ class ArtifactsTest extends TestCase
         $filesystem->dumpFile($filePath2, (string) json_encode([
             'foo' => 'baz',
         ]));
+
+        return $artifactsFilesystem;
     }
 
     private function getStorageClient(): StorageClient
