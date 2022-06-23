@@ -56,6 +56,15 @@ class ArtifactsTest extends TestCase
         self::assertContains('artifact', $storageFile['tags']);
         self::assertContains('componentId-keboola.component', $storageFile['tags']);
         self::assertContains('configId-123', $storageFile['tags']);
+
+        $downloadedArtifactPath = '/tmp/downloaded.tar.gz';
+        $storageClient->downloadFile($fileId, $downloadedArtifactPath);
+        $artifactsFilesystem->extractArchive($downloadedArtifactPath, '/tmp');
+
+        $file1 = file_get_contents('/tmp/file1');
+        $file2 = file_get_contents('/tmp/file2');
+        self::assertEquals('{"foo":"bar"}', $file1);
+        self::assertEquals('{"foo":"baz"}', $file2);
     }
 
     private function getStorageClient(): StorageClient

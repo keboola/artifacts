@@ -46,6 +46,18 @@ class Filesystem
         $process->mustRun();
     }
 
+    public function extractArchive(string $sourcePath, string $targetPath): void
+    {
+        $process = new Process([
+            'tar',
+            '-xf',
+            $sourcePath,
+            '-C',
+            $targetPath,
+        ]);
+        $process->mustRun();
+    }
+
     private function mkdir(string $path): void
     {
         if (!$this->filesystem->exists($path)) {
