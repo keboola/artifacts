@@ -33,6 +33,9 @@ class Artifacts
         string $jobId
     ) {
         $this->storageClient = $storageClient;
+        // todo setRunId?
+//        $storageClient->setRunId($runId);
+
         $this->logger = $logger;
         $this->filesystem = new Filesystem($temp);
         $this->branchId = $branchId;
@@ -72,10 +75,20 @@ class Artifacts
         }
     }
 
-    public function getStorageFilesByQuery(string $query): array
-    {
+    public function downloadLatestRuns(
+        ?int $limit = null
+    ): array {
         $options = new ListFilesOptions();
-        $options->setQuery($query);
+        $options->setQuery(sprintf(
+            'tags:(artifact AND componentId-%s AND configId-%s)',
+            $this->componentId,
+            $this->configId
+        ));
+
+        if ($limit) {
+            $options->setLimit($limit);
+        }
+
         return $this->storageClient->listFiles($options);
     }
 }
