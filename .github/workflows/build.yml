@@ -1,0 +1,20 @@
+name: "Build"
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+env:
+  STORAGE_API_URL: 'https://connection.keboola.com'
+  STORAGE_API_TOKEN: '${{ secrets.STORAGE_API_TOKEN }}'
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Check out the repo'
+        uses: actions/checkout@v2
+
+      - name: 'Run tests'
+        run: 'docker-compose run --rm tests composer ci'
