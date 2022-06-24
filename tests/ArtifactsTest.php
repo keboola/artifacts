@@ -41,6 +41,7 @@ class ArtifactsTest extends TestCase
             $storageClient,
             $logger,
             $temp,
+            'branch-123',
             'keboola.component',
             '123',
             $jobId
@@ -54,6 +55,7 @@ class ArtifactsTest extends TestCase
 
         self::assertEquals($fileId, $storageFile['id']);
         self::assertContains('artifact', $storageFile['tags']);
+        self::assertContains('branchId-branch-123', $storageFile['tags']);
         self::assertContains('componentId-keboola.component', $storageFile['tags']);
         self::assertContains('configId-123', $storageFile['tags']);
 

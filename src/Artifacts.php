@@ -18,6 +18,7 @@ class Artifacts
     private StorageClient $storageClient;
     private Filesystem $filesystem;
     private LoggerInterface $logger;
+    private string $branchId;
     private string $componentId;
     private string $configId;
     private string $jobId;
@@ -26,6 +27,7 @@ class Artifacts
         StorageClient $storageClient,
         LoggerInterface $logger,
         Temp $temp,
+        string $branchId,
         string $componentId,
         string $configId,
         string $jobId
@@ -33,6 +35,7 @@ class Artifacts
         $this->storageClient = $storageClient;
         $this->logger = $logger;
         $this->filesystem = new Filesystem($temp);
+        $this->branchId = $branchId;
         $this->componentId = $componentId;
         $this->configId = $configId;
         $this->jobId = $jobId;
@@ -55,6 +58,7 @@ class Artifacts
             $options = new FileUploadOptions();
             $options->setTags([
                 'artifact',
+                'branchId-' . $this->branchId,
                 'componentId-' . $this->componentId,
                 'configId-' . $this->configId,
                 'jobId-' . $this->jobId,
