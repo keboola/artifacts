@@ -80,7 +80,8 @@ class Artifacts
     ): array {
         $options = new ListFilesOptions();
         $options->setQuery(sprintf(
-            'tags:(artifact AND componentId-%s AND configId-%s)',
+            'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s)',
+            $this->branchId,
             $this->componentId,
             $this->configId
         ));
