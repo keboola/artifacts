@@ -33,9 +33,6 @@ class Artifacts
         string $jobId
     ) {
         $this->storageClient = $storageClient;
-        // todo setRunId?
-//        $storageClient->setRunId($runId);
-
         $this->logger = $logger;
         $this->filesystem = new Filesystem($temp);
         $this->branchId = $branchId;
@@ -44,9 +41,14 @@ class Artifacts
         $this->jobId = $jobId;
     }
 
+    public function getFilesystem(): Filesystem
+    {
+        return $this->filesystem;
+    }
+
     public function uploadCurrent(): ?int
     {
-        $currentDir = $this->filesystem->getRunsCurrentDir();
+        $currentDir = $this->filesystem->getCurrentDir();
 
         $finder = new Finder();
         $count = $finder->in($currentDir)->count();
@@ -76,20 +78,52 @@ class Artifacts
     }
 
     public function downloadLatestRuns(
-        ?int $limit = null
-    ): array {
-        $options = new ListFilesOptions();
-        $options->setQuery(sprintf(
-            'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s)',
-            $this->branchId,
-            $this->componentId,
-            $this->configId
-        ));
+        int $limit = 1
+    ): void {
+        $files = $this->storageClient->listFiles(
+            (new ListFilesOptions())
+                ->setQuery(sprintf(
+                    'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s)',
+                    $this->branchId,
+                    $this->componentId,
+                    $this->configId
+                ))
+                ->setLimit($limit)
+        );
 
-        if ($limit) {
-            $options->setLimit($limit);
+        foreach ($files as $file) {
+            try {
+                $jobId = $this->getJobIdFromTag($file);
+                $tmpPath = $this->filesystem->getTmpDir() . '/' . $file['id'];
+                $this->storageClient->downloadFile($file['id'], $tmpPath);
+                $this->filesystem->extractArchive($tmpPath, $this->filesystem->getJobRunDir($jobId));
+            } catch (ArtifactsException $e) {
+                $this->logger->warning(sprintf(
+                    'Error downloading run artifact file id "%s"',
+                    $file['id']
+                ));
+            }
+        }
+    }
+
+    private function getJobIdFromTag(array $file): string
+    {
+        $jobIds = array_filter($file['tags'], function ($tag) {
+            return strstr($tag, 'jobId');
+        });
+
+        if (empty($jobIds)) {
+            throw new ArtifactsException(
+                sprintf('Missing jobId tag on artifact file "%s"', $file['id'])
+            );
         }
 
-        return $this->storageClient->listFiles($options);
+        if (count($jobIds) > 1) {
+            throw new ArtifactsException(
+                sprintf('There is more than one jobId tag on artifact file "%s"', $file['id'])
+            );
+        }
+
+        return array_shift($jobIds);
     }
 }

@@ -10,24 +10,32 @@ use Symfony\Component\Process\Process;
 
 class Filesystem
 {
+    private string $tmpDir;
     private string $dataDir;
     private string $artifactsDir;
-    private string $runsCurrentDir;
+    private string $currentDir;
+    private string $runsDir;
     private string $archivePath;
     private SymfonyFilesystem $filesystem;
 
     public function __construct(Temp $temp)
     {
+        $this->tmpDir = $temp->getTmpFolder() . '/tmp';
         $this->dataDir = $temp->getTmpFolder() . '/data';
-        $this->artifactsDir = $this->dataDir . '/artifacts';
-        $this->runsCurrentDir = $this->artifactsDir . '/runs/current/';
         $this->archivePath = $temp->getTmpFolder() . '/tmp/artifacts.tar.gz';
-        $tmpDir = $temp->getTmpFolder() . '/tmp';
+        $this->artifactsDir = $this->dataDir . '/artifacts';
+        $this->currentDir = $this->artifactsDir . '/current';
+        $this->runsDir = $this->artifactsDir . '/runs';
 
         $this->filesystem = new SymfonyFilesystem();
-        $this->mkdir($tmpDir);
+        $this->mkdir($this->tmpDir);
         $this->mkdir($this->artifactsDir);
-        $this->mkdir($this->runsCurrentDir);
+        $this->mkdir($this->currentDir);
+    }
+
+    public function getTmpDir(): string
+    {
+        return $this->tmpDir;
     }
 
     public function getDataDir(): string
@@ -40,9 +48,19 @@ class Filesystem
         return $this->artifactsDir;
     }
 
-    public function getRunsCurrentDir(): string
+    public function getCurrentDir(): string
     {
-        return $this->runsCurrentDir;
+        return $this->currentDir;
+    }
+
+    public function getRunsDir(): string
+    {
+        return $this->runsDir;
+    }
+
+    public function getJobRunDir(string $jobId): string
+    {
+        return sprintf('%s/%s', $this->runsDir, $jobId);
     }
 
     public function getArchivePath(): string
@@ -65,6 +83,7 @@ class Filesystem
 
     public function extractArchive(string $sourcePath, string $targetPath): void
     {
+        $this->mkdir($targetPath);
         $process = new Process([
             'tar',
             '-xf',

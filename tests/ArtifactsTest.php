@@ -12,6 +12,7 @@ use Keboola\Temp\Temp;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\Test\TestLogger;
 use Symfony\Component\Filesystem\Filesystem as SymfonyFilesystem;
+use Symfony\Component\Finder\Finder;
 
 class ArtifactsTest extends TestCase
 {
@@ -62,7 +63,6 @@ class ArtifactsTest extends TestCase
         $logger = new TestLogger();
 
         // generate artifacts for a few jobs
-        $uploadedFiles = [];
         for ($i=0; $i<10; $i++) {
             $temp = new Temp();
             $this->generateArtifacts($temp);
@@ -77,7 +77,7 @@ class ArtifactsTest extends TestCase
                 '123',
                 $jobId
             );
-            $uploadedFiles[] = $artifacts->uploadCurrent();
+            $artifacts->uploadCurrent();
         }
         // another config and component
         for ($i=0; $i<10; $i++) {
@@ -94,7 +94,7 @@ class ArtifactsTest extends TestCase
                 '456',
                 $jobId
             );
-            $uploadedFiles[] = $artifacts->uploadCurrent();
+            $artifacts->uploadCurrent();
         }
 
         $temp = new Temp();
@@ -107,24 +107,45 @@ class ArtifactsTest extends TestCase
             '123',
             $jobId
         );
-        $files = $artifacts->downloadLatestRuns(5);
+        $artifacts->downloadLatestRuns(5);
 
-        self::assertCount(5, $files);
-        foreach ($files as $file) {
-            self::assertContains($file['id'], $uploadedFiles);
-            self::assertContains('artifact', $file['tags']);
-            self::assertContains('branchId-branch-123', $file['tags']);
-            self::assertContains('componentId-keboola.component', $file['tags']);
-            self::assertContains('configId-123', $file['tags']);
+        // level 1
+        $finder = new Finder();
+        $finder
+            ->files()
+            ->in($artifacts->getFilesystem()->getRunsDir())
+            ->depth(1)
+        ;
+
+        foreach ($finder as $file) {
+            self::assertEquals('file1', $file->getFilename());
+            self::assertEquals('{"foo":"bar"}', $file->getContents());
         }
+
+        self::assertEquals(5, $finder->count());
+
+        // level 2 (sub folder)
+        $finder = new Finder();
+        $finder
+            ->files()
+            ->in($artifacts->getFilesystem()->getRunsDir())
+            ->depth(2)
+        ;
+
+        foreach ($finder as $file) {
+            self::assertEquals('file2', $file->getFilename());
+            self::assertEquals('{"foo":"baz"}', $file->getContents());
+        }
+
+        self::assertEquals(5, $finder->count());
     }
 
     private function generateArtifacts(Temp $temp): Filesystem
     {
         $artifactsFilesystem = new Filesystem($temp);
 
-        $filePath1 = $artifactsFilesystem->getRunsCurrentDir() . '/file1';
-        $filePath2 = $artifactsFilesystem->getRunsCurrentDir() . '/folder/file2';
+        $filePath1 = $artifactsFilesystem->getCurrentDir() . '/file1';
+        $filePath2 = $artifactsFilesystem->getCurrentDir() . '/folder/file2';
         $filesystem = new SymfonyFilesystem();
 
         // create some files
