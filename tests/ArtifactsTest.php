@@ -110,7 +110,7 @@ class ArtifactsTest extends TestCase
             '123',
             $jobId
         );
-        $artifacts->downloadLatestRuns(5);
+        $artifacts->downloadLatestRuns(5, '-1 day');
 
         // level 1
         $finder = new Finder();

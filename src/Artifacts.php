@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts;
 
+use DateTime;
 use Keboola\StorageApi\Client as StorageClient;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\FileUploadOptions;
@@ -78,16 +79,23 @@ class Artifacts
     }
 
     public function downloadLatestRuns(
-        int $limit = 1
+        int $limit = 1,
+        ?string $dateSince = null
     ): void {
+        $query = sprintf(
+            'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s)',
+            $this->branchId,
+            $this->componentId,
+            $this->configId
+        );
+        if ($dateSince) {
+            $dateUTC = (new DateTime($dateSince))->format('Y-m-d');
+            $query .= ' AND created:>' . $dateUTC;
+        }
+
         $files = $this->storageClient->listFiles(
             (new ListFilesOptions())
-                ->setQuery(sprintf(
-                    'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s)',
-                    $this->branchId,
-                    $this->componentId,
-                    $this->configId
-                ))
+                ->setQuery($query)
                 ->setLimit($limit)
         );
 
