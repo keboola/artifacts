@@ -36,6 +36,9 @@ class ArtifactsTest extends TestCase
         );
         $fileId = $artifacts->uploadCurrent();
 
+        // wait for file to be available in Storage
+        sleep(3);
+
         $storageFile = $storageClient->listFiles(
             (new ListFilesOptions())
                 ->setQuery(sprintf('tags:jobId-%d*', $jobId))

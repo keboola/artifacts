@@ -93,7 +93,7 @@ class Artifacts
 
         foreach ($files as $file) {
             try {
-                $jobId = $this->getJobIdFromTag($file);
+                $jobId = StorageFileHelper::getJobIdFromFileTag($file);
                 $tmpPath = $this->filesystem->getTmpDir() . '/' . $file['id'];
                 $this->storageClient->downloadFile($file['id'], $tmpPath);
                 $this->filesystem->extractArchive($tmpPath, $this->filesystem->getJobRunDir($jobId));
@@ -104,26 +104,5 @@ class Artifacts
                 ));
             }
         }
-    }
-
-    private function getJobIdFromTag(array $file): string
-    {
-        $jobIds = array_filter($file['tags'], function ($tag) {
-            return strstr($tag, 'jobId');
-        });
-
-        if (empty($jobIds)) {
-            throw new ArtifactsException(
-                sprintf('Missing jobId tag on artifact file "%s"', $file['id'])
-            );
-        }
-
-        if (count($jobIds) > 1) {
-            throw new ArtifactsException(
-                sprintf('There is more than one jobId tag on artifact file "%s"', $file['id'])
-            );
-        }
-
-        return array_shift($jobIds);
     }
 }
