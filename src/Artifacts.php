@@ -16,6 +16,7 @@ use Symfony\Component\Process\Exception\ProcessFailedException;
 
 class Artifacts
 {
+    public const DOWNLOAD_FILES_MAX_LIMIT = 50;
     private StorageClient $storageClient;
     private Filesystem $filesystem;
     private LoggerInterface $logger;
@@ -79,7 +80,7 @@ class Artifacts
     }
 
     public function downloadLatestRuns(
-        int $limit = 1,
+        ?int $limit = null,
         ?string $dateSince = null
     ): void {
         $query = sprintf(
@@ -91,6 +92,9 @@ class Artifacts
         if ($dateSince) {
             $dateUTC = (new DateTime($dateSince))->format('Y-m-d');
             $query .= ' AND created:>' . $dateUTC;
+        }
+        if ($limit === null || $limit > self::DOWNLOAD_FILES_MAX_LIMIT) {
+            $limit = self::DOWNLOAD_FILES_MAX_LIMIT;
         }
 
         $files = $this->storageClient->listFiles(

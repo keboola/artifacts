@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts\Tests;
 
+use DateTime;
+use Generator;
 use Keboola\Artifacts\Artifacts;
 use Keboola\Artifacts\Filesystem;
 use Keboola\StorageApi\Client as StorageClient;
@@ -70,7 +72,6 @@ class ArtifactsTest extends TestCase
             $temp = new Temp();
             $this->generateArtifacts($temp);
 
-            $jobId = (string) rand(0, 999999);
             $artifacts = new Artifacts(
                 $storageClient,
                 $logger,
@@ -78,39 +79,46 @@ class ArtifactsTest extends TestCase
                 'branch-123',
                 'keboola.component',
                 '123',
-                $jobId
+                (string) rand(0, 999999)
             );
             $artifacts->uploadCurrent();
         }
-        // another config and component
+        // another branch, config and component
         for ($i=0; $i<10; $i++) {
             $temp = new Temp();
             $this->generateArtifacts($temp);
 
-            $jobId = (string) rand(0, 999999);
             $artifacts = new Artifacts(
                 $storageClient,
                 $logger,
                 $temp,
-                'branch-123',
+                'default',
                 'keboola.component-2',
                 '456',
-                $jobId
+                (string) rand(0, 999999)
             );
             $artifacts->uploadCurrent();
         }
 
+        $this->downloadAndAssert('branch-123', 'keboola.component', '123', 5);
+
+        $this->downloadAndAssert('default', 'keboola.component-2', '456', 3);
+    }
+
+    private function downloadAndAssert(string $branchId, string $componentId, string $configId, int $limit): void
+    {
+        $logger = new TestLogger();
         $temp = new Temp();
         $artifacts = new Artifacts(
-            $storageClient,
+            $this->getStorageClient(),
             $logger,
             $temp,
-            'branch-123',
-            'keboola.component',
-            '123',
-            $jobId
+            $branchId,
+            $componentId,
+            $configId,
+            (string) rand(0, 999999)
         );
-        $artifacts->downloadLatestRuns(5, '-1 day');
+        $artifacts->downloadLatestRuns($limit, '-1 day');
 
         // level 1
         $finder = new Finder();
@@ -125,7 +133,7 @@ class ArtifactsTest extends TestCase
             self::assertEquals('{"foo":"bar"}', $file->getContents());
         }
 
-        self::assertEquals(5, $finder->count());
+        self::assertEquals($limit, $finder->count());
 
         // level 2 (sub folder)
         $finder = new Finder();
@@ -140,7 +148,47 @@ class ArtifactsTest extends TestCase
             self::assertEquals('{"foo":"baz"}', $file->getContents());
         }
 
-        self::assertEquals(5, $finder->count());
+        self::assertEquals($limit, $finder->count());
+    }
+
+    /**
+     * @dataProvider downloadRunsDateSinceProvider
+     */
+    public function testDownloadLatestRunsDateSince(
+        string $createdSince,
+        string $branchId,
+        ?int $limit,
+        int $expectedLimit
+    ): void {
+        $expectedQuery = sprintf(
+            'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s) AND created:>%s',
+            $branchId,
+            'keboola.component',
+            '123',
+            (new DateTime($createdSince))->format('Y-m-d')
+        );
+
+        $storageClientMock = self::createMock(StorageClient::class);
+        $storageClientMock
+            ->expects(self::once())
+            ->method('listFiles')
+            ->with((new ListFilesOptions())
+                ->setQuery($expectedQuery)
+                ->setLimit($expectedLimit))
+            ->willReturn([]);
+
+        $logger = new TestLogger();
+        $temp = new Temp();
+        $artifacts = new Artifacts(
+            $storageClientMock,
+            $logger,
+            $temp,
+            $branchId,
+            'keboola.component',
+            '123',
+            'job-123'
+        );
+        $artifacts->downloadLatestRuns($limit, $createdSince);
     }
 
     private function generateArtifacts(Temp $temp): Filesystem
@@ -169,5 +217,43 @@ class ArtifactsTest extends TestCase
             'url' => (string) getenv('STORAGE_API_URL'),
             'token' => (string) getenv('STORAGE_API_TOKEN'),
         ]);
+    }
+
+    public function downloadRunsDateSinceProvider(): Generator
+    {
+        yield 'basic' => [
+            '2022-01-01',
+            'branch-123',
+            null,
+            Artifacts::DOWNLOAD_FILES_MAX_LIMIT,
+        ];
+
+        yield 'relative date' => [
+            '-7 days',
+            'branch-123',
+            null,
+            Artifacts::DOWNLOAD_FILES_MAX_LIMIT,
+        ];
+
+        yield 'default branch' => [
+            'yesterday',
+            'default',
+            null,
+            Artifacts::DOWNLOAD_FILES_MAX_LIMIT,
+        ];
+
+        yield 'with limit' => [
+            'yesterday',
+            'default',
+            5,
+            5,
+        ];
+
+        yield 'with limit over bounds' => [
+            'yesterday',
+            'default',
+            999,
+            50,
+        ];
     }
 }
