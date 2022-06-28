@@ -19,7 +19,7 @@
         "php": ">=7.4",
         "ext-json": "*",
         "keboola/job-queue-internal-api-php-client": "^10.7",
-        "keboola/php-temp": "1.0",
+        "keboola/php-temp": ">=1.0",
         "keboola/storage-api-client": "^13.1",
         "symfony/filesystem": "^5.4",
         "symfony/finder": "^5.4"
