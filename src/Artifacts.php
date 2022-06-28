@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts;
 
+use DateTime;
 use Keboola\StorageApi\Client as StorageClient;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\FileUploadOptions;
@@ -15,6 +16,7 @@ use Symfony\Component\Process\Exception\ProcessFailedException;
 
 class Artifacts
 {
+    public const DOWNLOAD_FILES_MAX_LIMIT = 50;
     private StorageClient $storageClient;
     private Filesystem $filesystem;
     private LoggerInterface $logger;
@@ -41,9 +43,14 @@ class Artifacts
         $this->jobId = $jobId;
     }
 
+    public function getFilesystem(): Filesystem
+    {
+        return $this->filesystem;
+    }
+
     public function uploadCurrent(): ?int
     {
-        $currentDir = $this->filesystem->getRunsCurrentDir();
+        $currentDir = $this->filesystem->getCurrentDir();
 
         $finder = new Finder();
         $count = $finder->in($currentDir)->count();
@@ -72,10 +79,42 @@ class Artifacts
         }
     }
 
-    public function getStorageFilesByQuery(string $query): array
-    {
-        $options = new ListFilesOptions();
-        $options->setQuery($query);
-        return $this->storageClient->listFiles($options);
+    public function downloadLatestRuns(
+        ?int $limit = null,
+        ?string $dateSince = null
+    ): void {
+        $query = sprintf(
+            'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s)',
+            $this->branchId,
+            $this->componentId,
+            $this->configId
+        );
+        if ($dateSince) {
+            $dateUTC = (new DateTime($dateSince))->format('Y-m-d');
+            $query .= ' AND created:>' . $dateUTC;
+        }
+        if ($limit === null || $limit > self::DOWNLOAD_FILES_MAX_LIMIT) {
+            $limit = self::DOWNLOAD_FILES_MAX_LIMIT;
+        }
+
+        $files = $this->storageClient->listFiles(
+            (new ListFilesOptions())
+                ->setQuery($query)
+                ->setLimit($limit)
+        );
+
+        foreach ($files as $file) {
+            try {
+                $jobId = StorageFileHelper::getJobIdFromFileTag($file);
+                $tmpPath = $this->filesystem->getTmpDir() . '/' . $file['id'];
+                $this->storageClient->downloadFile($file['id'], $tmpPath);
+                $this->filesystem->extractArchive($tmpPath, $this->filesystem->getJobRunDir($jobId));
+            } catch (ArtifactsException $e) {
+                $this->logger->warning(sprintf(
+                    'Error downloading run artifact file id "%s"',
+                    $file['id']
+                ));
+            }
+        }
     }
 }
