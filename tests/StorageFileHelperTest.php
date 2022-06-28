@@ -34,7 +34,7 @@ class StorageFileHelperTest extends TestCase
             ],
         ];
 
-        self::expectExceptionObject(
+        $this->expectExceptionObject(
             new ArtifactsException('Missing jobId tag on artifact file "123456"')
         );
         StorageFileHelper::getJobIdFromFileTag($file);
@@ -52,7 +52,7 @@ class StorageFileHelperTest extends TestCase
             ],
         ];
 
-        self::expectExceptionObject(
+        $this->expectExceptionObject(
             new ArtifactsException('There is more than one jobId tag on artifact file "123456"')
         );
         StorageFileHelper::getJobIdFromFileTag($file);
