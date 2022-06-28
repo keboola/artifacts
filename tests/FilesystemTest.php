@@ -76,7 +76,7 @@ class FilesystemTest extends TestCase
         $artifactsFilesystem->extractArchive($artifactsFilesystem->getArchivePath(), $targetPath);
         self::assertDirectoryExists($targetPath);
 
-        $finder = (new Finder())->files()->in($targetPath);
+        $finder = (new Finder())->files()->in($targetPath)->sortByName();
         self::assertSame(2, $finder->count());
 
         $files = [];
@@ -86,8 +86,8 @@ class FilesystemTest extends TestCase
 
         self::assertSame(
             [
-                sprintf('%s/archive-extract-test/test1.txt', $temp->getTmpFolder()),
                 sprintf('%s/archive-extract-test/test/test2.txt', $temp->getTmpFolder()),
+                sprintf('%s/archive-extract-test/test1.txt', $temp->getTmpFolder()),
             ],
             $files
         );
