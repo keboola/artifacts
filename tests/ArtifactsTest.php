@@ -123,17 +123,18 @@ class ArtifactsTest extends TestCase
             ->willThrowException($exception)
         ;
 
+        $temp = new Temp();
+        $this->generateArtifacts($temp);
+
         $artifacts = new Artifacts(
             $storageClientMock,
             self::createMock(Logger::class),
-            new Temp(),
+            $temp,
             'main-branch',
             'keboola.orchestrator',
             '123456',
             '123456789',
         );
-
-        touch($artifacts->getFilesystem()->getCurrentDir() . '/test.txt');
 
         $this->expectException($expectedException);
         $this->expectExceptionMessage($expectedExceptionMessage);
@@ -149,10 +150,11 @@ class ArtifactsTest extends TestCase
             ->method($this->anything())
         ;
 
+        $temp = new Temp();
         $artifacts = new Artifacts(
             $storageClientMock,
             self::createMock(Logger::class),
-            new Temp(),
+            $temp,
             'main-branch',
             'keboola.orchestrator',
             '123456',
@@ -160,6 +162,32 @@ class ArtifactsTest extends TestCase
         );
 
         self::assertNull($artifacts->uploadCurrent());
+    }
+
+    public function testUploadCurrentConfigIdNull(): void
+    {
+        $storageClientMock = self::createMock(StorageClient::class);
+        $storageClientMock
+            ->expects($this->never())
+            ->method($this->anything())
+        ;
+
+        $testLogger = new TestLogger();
+
+        $artifacts = new Artifacts(
+            $storageClientMock,
+            $testLogger,
+            new Temp(),
+            'main-branch',
+            'keboola.orchestrator',
+            null,
+            '123456789',
+        );
+
+        self::assertNull($artifacts->uploadCurrent());
+        self::assertTrue($testLogger->hasWarningThatContains(
+            'Skipping upload of artifacts, configuration Id is not set'
+        ));
     }
 
     public function testDownloadLatestRuns(): void
@@ -251,6 +279,32 @@ class ArtifactsTest extends TestCase
         self::assertEquals($limit, $finder->count());
     }
 
+    public function testDownloadLatestRunsConfigIdNull(): void
+    {
+        $storageClientMock = self::createMock(StorageClient::class);
+        $storageClientMock
+            ->expects($this->never())
+            ->method($this->anything())
+        ;
+
+        $testLogger = new TestLogger();
+
+        $artifacts = new Artifacts(
+            $storageClientMock,
+            $testLogger,
+            new Temp(),
+            'main-branch',
+            'keboola.orchestrator',
+            null,
+            '123456789',
+        );
+
+        self::assertNull($artifacts->uploadCurrent());
+        self::assertTrue($testLogger->hasWarningThatContains(
+            'Skipping upload of artifacts, configuration Id is not set'
+        ));
+    }
+
     /**
      * @dataProvider downloadRunsDateSinceProvider
      */
@@ -291,34 +345,6 @@ class ArtifactsTest extends TestCase
         $artifacts->downloadLatestRuns($limit, $createdSince);
     }
 
-    private function generateArtifacts(Temp $temp): Filesystem
-    {
-        $artifactsFilesystem = new Filesystem($temp);
-
-        $filePath1 = $artifactsFilesystem->getCurrentDir() . '/file1';
-        $filePath2 = $artifactsFilesystem->getCurrentDir() . '/folder/file2';
-        $filesystem = new SymfonyFilesystem();
-
-        // create some files
-        $filesystem->dumpFile($filePath1, (string) json_encode([
-            'foo' => 'bar',
-        ]));
-
-        $filesystem->dumpFile($filePath2, (string) json_encode([
-            'foo' => 'baz',
-        ]));
-
-        return $artifactsFilesystem;
-    }
-
-    private function getStorageClient(): StorageClient
-    {
-        return new StorageClient([
-            'url' => (string) getenv('STORAGE_API_URL'),
-            'token' => (string) getenv('STORAGE_API_TOKEN'),
-        ]);
-    }
-
     public function downloadRunsDateSinceProvider(): Generator
     {
         yield 'basic' => [
@@ -355,5 +381,33 @@ class ArtifactsTest extends TestCase
             999,
             50,
         ];
+    }
+
+    private function generateArtifacts(Temp $temp): Filesystem
+    {
+        $artifactsFilesystem = new Filesystem($temp);
+
+        $filePath1 = $artifactsFilesystem->getCurrentDir() . '/file1';
+        $filePath2 = $artifactsFilesystem->getCurrentDir() . '/folder/file2';
+        $filesystem = new SymfonyFilesystem();
+
+        // create some files
+        $filesystem->dumpFile($filePath1, (string) json_encode([
+            'foo' => 'bar',
+        ]));
+
+        $filesystem->dumpFile($filePath2, (string) json_encode([
+            'foo' => 'baz',
+        ]));
+
+        return $artifactsFilesystem;
+    }
+
+    private function getStorageClient(): StorageClient
+    {
+        return new StorageClient([
+            'url' => (string) getenv('STORAGE_API_URL'),
+            'token' => (string) getenv('STORAGE_API_TOKEN'),
+        ]);
     }
 }

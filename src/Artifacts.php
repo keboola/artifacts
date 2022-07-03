@@ -22,7 +22,7 @@ class Artifacts
     private LoggerInterface $logger;
     private string $branchId;
     private string $componentId;
-    private string $configId;
+    private ?string $configId;
     private string $jobId;
 
     public function __construct(
@@ -31,7 +31,7 @@ class Artifacts
         Temp $temp,
         string $branchId,
         string $componentId,
-        string $configId,
+        ?string $configId,
         string $jobId
     ) {
         $this->storageClient = $storageClient;
@@ -50,11 +50,14 @@ class Artifacts
 
     public function uploadCurrent(): ?int
     {
-        $currentDir = $this->filesystem->getCurrentDir();
+        if (is_null($this->configId)) {
+            $this->logger->warning('Skipping upload of artifacts, configuration Id is not set');
+            return null;
+        }
 
+        $currentDir = $this->filesystem->getCurrentDir();
         $finder = new Finder();
         $count = $finder->in($currentDir)->count();
-
         if ($count === 0) {
             return null;
         }
@@ -83,6 +86,11 @@ class Artifacts
         ?int $limit = null,
         ?string $dateSince = null
     ): void {
+        if (is_null($this->configId)) {
+            $this->logger->warning('Skipping download of artifacts, configuration Id is not set');
+            return;
+        }
+
         $query = sprintf(
             'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s)',
             $this->branchId,
