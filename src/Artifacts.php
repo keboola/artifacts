@@ -50,7 +50,7 @@ class Artifacts
 
     public function uploadCurrent(): ?int
     {
-        if (empty($this->configId)) {
+        if (is_null($this->configId)) {
             $this->logger->warning('Skipping upload of artifacts, configuration Id is not set');
             return null;
         }
@@ -86,7 +86,7 @@ class Artifacts
         ?int $limit = null,
         ?string $dateSince = null
     ): void {
-        if (empty($this->configId)) {
+        if (is_null($this->configId)) {
             $this->logger->warning('Skipping download of artifacts, configuration Id is not set');
             return;
         }
