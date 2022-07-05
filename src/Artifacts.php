@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Keboola\Artifacts;
 
 use DateTime;
+use JetBrains\PhpStorm\ArrayShape;
 use Keboola\StorageApi\Client as StorageClient;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\FileUploadOptions;
@@ -48,7 +49,7 @@ class Artifacts
         return $this->filesystem;
     }
 
-    public function uploadCurrent(): ?int
+    public function uploadCurrent(): ?array
     {
         if (is_null($this->configId)) {
             $this->logger->warning('Skipping upload of artifacts, configuration Id is not set');
@@ -76,7 +77,7 @@ class Artifacts
 
             $fileId = $this->storageClient->uploadFile($this->filesystem->getArchivePath(), $options);
             $this->logger->info(sprintf('Uploaded artifact for job "%s" to file "%s"', $this->jobId, $fileId));
-            return $fileId;
+            return $this->fileToResult($fileId);
         } catch (ProcessFailedException | ClientException $e) {
             throw new ArtifactsException(sprintf('Error uploading file: %s', $e->getMessage()), 0, $e);
         }
@@ -85,10 +86,10 @@ class Artifacts
     public function downloadLatestRuns(
         ?int $limit = null,
         ?string $dateSince = null
-    ): void {
+    ): array {
         if (is_null($this->configId)) {
             $this->logger->warning('Skipping download of artifacts, configuration Id is not set');
-            return;
+            return [];
         }
 
         $query = sprintf(
@@ -111,18 +112,31 @@ class Artifacts
                 ->setLimit($limit)
         );
 
+        $result = [];
         foreach ($files as $file) {
             try {
                 $jobId = StorageFileHelper::getJobIdFromFileTag($file);
                 $tmpPath = $this->filesystem->getTmpDir() . '/' . $file['id'];
                 $this->storageClient->downloadFile($file['id'], $tmpPath);
-                $this->filesystem->extractArchive($tmpPath, $this->filesystem->getJobRunDir($jobId));
+                $dstPath = $this->filesystem->getJobRunDir($jobId);
+                $this->filesystem->extractArchive($tmpPath, $dstPath);
+                $result[] = $this->fileToResult($file['id']);
             } catch (ArtifactsException $e) {
                 $this->logger->warning(sprintf(
-                    'Error downloading run artifact file id "%s"',
-                    $file['id']
+                    'Error downloading run artifact file id "%s": %s',
+                    $file['id'],
+                    $e->getMessage()
                 ));
             }
         }
+
+        return $result;
+    }
+
+    private function fileToResult(int $fileId): array
+    {
+        return [
+            'storageFileId' => $fileId,
+        ];
     }
 }

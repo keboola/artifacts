@@ -63,7 +63,7 @@ class ArtifactsTest extends TestCase
             '123',
             $jobId
         );
-        $fileId = $artifacts->uploadCurrent();
+        $uploadedFile = $artifacts->uploadCurrent();
 
         // wait for file to be available in Storage
         sleep(3);
@@ -73,14 +73,15 @@ class ArtifactsTest extends TestCase
                 ->setQuery(sprintf('tags:jobId-%d*', $jobId))
         )[0];
 
-        self::assertSame($fileId, $storageFile['id']);
+        self::assertSame(['storageFileId' => $storageFile['id']], $uploadedFile);
+        self::assertSame($uploadedFile['storageFileId'], $storageFile['id']);
         self::assertContains('artifact', $storageFile['tags']);
         self::assertContains('branchId-branch-123', $storageFile['tags']);
         self::assertContains('componentId-keboola.component', $storageFile['tags']);
         self::assertContains('configId-123', $storageFile['tags']);
 
         $downloadedArtifactPath = '/tmp/downloaded.tar.gz';
-        $storageClient->downloadFile($fileId, $downloadedArtifactPath);
+        $storageClient->downloadFile($uploadedFile['storageFileId'], $downloadedArtifactPath);
         $filesystem->extractArchive($downloadedArtifactPath, '/tmp');
 
         $file1 = file_get_contents('/tmp/file1');
@@ -246,7 +247,10 @@ class ArtifactsTest extends TestCase
             $configId,
             (string) rand(0, 999999)
         );
-        $artifacts->downloadLatestRuns($limit, '-1 day');
+        $result = $artifacts->downloadLatestRuns($limit, '-1 day');
+
+        self::assertCount($limit, $result);
+        self::assertArrayHasKey('storageFileId', $result[0]);
 
         // level 1
         $finder = new Finder();
