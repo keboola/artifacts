@@ -63,10 +63,11 @@ class ArtifactsTest extends TestCase
             '123',
             $jobId
         );
-        $uploadedFile = $artifacts->uploadCurrent();
+        $uploadedFiles = $artifacts->upload();
+        $uploadedFile = $uploadedFiles[0];
 
         // wait for file to be available in Storage
-        sleep(3);
+        sleep(1);
 
         $storageFile = $storageClient->listFiles(
             (new ListFilesOptions())
@@ -140,7 +141,7 @@ class ArtifactsTest extends TestCase
         $this->expectException($expectedException);
         $this->expectExceptionMessage($expectedExceptionMessage);
 
-        $artifacts->uploadCurrent();
+        $artifacts->upload();
     }
 
     public function testUploadCurrentDoNotUploadIfNoFileExists(): void
@@ -162,7 +163,7 @@ class ArtifactsTest extends TestCase
             '123456789',
         );
 
-        self::assertNull($artifacts->uploadCurrent());
+        self::assertEmpty($artifacts->upload());
     }
 
     public function testUploadCurrentConfigIdNull(): void
@@ -185,7 +186,7 @@ class ArtifactsTest extends TestCase
             '123456789',
         );
 
-        self::assertNull($artifacts->uploadCurrent());
+        self::assertEmpty($artifacts->upload());
         self::assertTrue($testLogger->hasWarningThatContains(
             'Skipping upload of artifacts, configuration Id is not set'
         ));
@@ -210,7 +211,7 @@ class ArtifactsTest extends TestCase
                 '123',
                 (string) rand(0, 999999)
             );
-            $artifacts->uploadCurrent();
+            $artifacts->upload();
         }
         // another branch, config and component
         for ($i=0; $i<10; $i++) {
@@ -226,7 +227,7 @@ class ArtifactsTest extends TestCase
                 '456',
                 (string) rand(0, 999999)
             );
-            $artifacts->uploadCurrent();
+            $artifacts->upload();
         }
 
         $this->downloadAndAssert('branch-123', 'keboola.component', '123', 5);
@@ -256,7 +257,7 @@ class ArtifactsTest extends TestCase
         $finder = new Finder();
         $finder
             ->files()
-            ->in($artifacts->getFilesystem()->getRunsDir())
+            ->in($artifacts->getFilesystem()->getDownloadRunsDir())
             ->depth(1)
         ;
 
@@ -271,7 +272,7 @@ class ArtifactsTest extends TestCase
         $finder = new Finder();
         $finder
             ->files()
-            ->in($artifacts->getFilesystem()->getRunsDir())
+            ->in($artifacts->getFilesystem()->getDownloadRunsDir())
             ->depth(2)
         ;
 
@@ -303,7 +304,7 @@ class ArtifactsTest extends TestCase
             '123456789',
         );
 
-        self::assertNull($artifacts->uploadCurrent());
+        self::assertEmpty($artifacts->upload());
         self::assertTrue($testLogger->hasWarningThatContains(
             'Skipping upload of artifacts, configuration Id is not set'
         ));
@@ -391,8 +392,8 @@ class ArtifactsTest extends TestCase
     {
         $artifactsFilesystem = new Filesystem($temp);
 
-        $filePath1 = $artifactsFilesystem->getCurrentDir() . '/file1';
-        $filePath2 = $artifactsFilesystem->getCurrentDir() . '/folder/file2';
+        $filePath1 = $artifactsFilesystem->getUploadCurrentDir() . '/file1';
+        $filePath2 = $artifactsFilesystem->getUploadCurrentDir() . '/folder/file2';
         $filesystem = new SymfonyFilesystem();
 
         // create some files

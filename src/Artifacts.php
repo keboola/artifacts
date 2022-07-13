@@ -49,38 +49,17 @@ class Artifacts
         return $this->filesystem;
     }
 
-    public function uploadCurrent(): ?array
+    public function upload(): array
     {
-        if (is_null($this->configId)) {
-            $this->logger->warning('Skipping upload of artifacts, configuration Id is not set');
-            return null;
+        if (!$this->checkConfigId()) {
+            return [];
         }
 
-        $currentDir = $this->filesystem->getCurrentDir();
-        $finder = new Finder();
-        $count = $finder->in($currentDir)->count();
-        if ($count === 0) {
-            return null;
-        }
+        $uploaded = [];
+        $uploaded[] = $this->uploadArtifact($this->filesystem->getUploadCurrentDir());
+        $uploaded[] = $this->uploadArtifact($this->filesystem->getUploadSharedDir(), ['shared']);
 
-        try {
-            $this->filesystem->archiveDir($currentDir, $this->filesystem->getArchivePath());
-
-            $options = new FileUploadOptions();
-            $options->setTags([
-                'artifact',
-                'branchId-' . $this->branchId,
-                'componentId-' . $this->componentId,
-                'configId-' . $this->configId,
-                'jobId-' . $this->jobId,
-            ]);
-
-            $fileId = $this->storageClient->uploadFile($this->filesystem->getArchivePath(), $options);
-            $this->logger->info(sprintf('Uploaded artifact for job "%s" to file "%s"', $this->jobId, $fileId));
-            return $this->fileToResult($fileId);
-        } catch (ProcessFailedException | ClientException $e) {
-            throw new ArtifactsException(sprintf('Error uploading file: %s', $e->getMessage()), 0, $e);
-        }
+        return array_filter($uploaded);
     }
 
     public function downloadLatestRuns(
@@ -118,7 +97,7 @@ class Artifacts
                 $jobId = StorageFileHelper::getJobIdFromFileTag($file);
                 $tmpPath = $this->filesystem->getTmpDir() . '/' . $file['id'];
                 $this->storageClient->downloadFile($file['id'], $tmpPath);
-                $dstPath = $this->filesystem->getJobRunDir($jobId);
+                $dstPath = $this->filesystem->getDownloadRunsJobDir($jobId);
                 $this->filesystem->extractArchive($tmpPath, $dstPath);
                 $result[] = $this->fileToResult($file['id']);
             } catch (ArtifactsException $e) {
@@ -138,5 +117,43 @@ class Artifacts
         return [
             'storageFileId' => $fileId,
         ];
+    }
+
+    private function uploadArtifact(string $directory, array $addTags = []): ?array
+    {
+        $finder = new Finder();
+        $count = $finder->in($directory)->count();
+        if ($count === 0) {
+            return null;
+        }
+
+        try {
+            $this->filesystem->archiveDir($directory, $this->filesystem->getArchivePath());
+
+            $options = new FileUploadOptions();
+            $options->setTags(array_merge([
+                'artifact',
+                'branchId-' . $this->branchId,
+                'componentId-' . $this->componentId,
+                'configId-' . $this->configId,
+                'jobId-' . $this->jobId,
+            ], $addTags));
+
+            $fileId = $this->storageClient->uploadFile($this->filesystem->getArchivePath(), $options);
+            $this->logger->info(sprintf('Uploaded artifact for job "%s" to file "%s"', $this->jobId, $fileId));
+            return $this->fileToResult($fileId);
+        } catch (ProcessFailedException | ClientException $e) {
+            throw new ArtifactsException(sprintf('Error uploading file: %s', $e->getMessage()), 0, $e);
+        }
+    }
+
+    private function checkConfigId(): bool
+    {
+        if (is_null($this->configId)) {
+            $this->logger->warning('Skipping upload of artifacts, configuration Id is not set');
+            return false;
+        }
+
+        return true;
     }
 }

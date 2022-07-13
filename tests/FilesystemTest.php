@@ -37,17 +37,17 @@ class FilesystemTest extends TestCase
             $path
         );
 
-        $path = $artifactsFilesystem->getCurrentDir();
+        $path = $artifactsFilesystem->getUploadCurrentDir();
         self::assertDirectoryExists($path);
         self::assertSame(
-            sprintf('%s/data/artifacts/current', $temp->getTmpFolder()),
+            sprintf('%s/data/artifacts/upload/current', $temp->getTmpFolder()),
             $path
         );
 
-        $path = $artifactsFilesystem->getRunsDir();
+        $path = $artifactsFilesystem->getDownloadRunsDir();
         self::assertDirectoryDoesNotExist($path);
         self::assertSame(
-            sprintf('%s/data/artifacts/runs', $temp->getTmpFolder()),
+            sprintf('%s/data/artifacts/download/runs', $temp->getTmpFolder()),
             $path
         );
 
@@ -64,11 +64,14 @@ class FilesystemTest extends TestCase
         $temp = new Temp();
         $artifactsFilesystem = new ArtifactsFilesystem($temp);
 
-        mkdir($artifactsFilesystem->getCurrentDir() . '/test');
-        touch($artifactsFilesystem->getCurrentDir() . '/test1.txt');
-        touch($artifactsFilesystem->getCurrentDir() . '/test/test2.txt');
+        mkdir($artifactsFilesystem->getUploadCurrentDir() . '/test');
+        touch($artifactsFilesystem->getUploadCurrentDir() . '/test1.txt');
+        touch($artifactsFilesystem->getUploadCurrentDir() . '/test/test2.txt');
 
-        $artifactsFilesystem->archiveDir($artifactsFilesystem->getCurrentDir(), $artifactsFilesystem->getArchivePath());
+        $artifactsFilesystem->archiveDir(
+            $artifactsFilesystem->getUploadCurrentDir(),
+            $artifactsFilesystem->getArchivePath()
+        );
         self::assertFileExists($artifactsFilesystem->getArchivePath());
 
         $targetPath = $temp->getTmpFolder() . '/archive-extract-test';
