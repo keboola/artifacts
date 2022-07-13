@@ -25,6 +25,7 @@ class Artifacts
     private string $componentId;
     private ?string $configId;
     private string $jobId;
+    private ?string $orchestrationId;
 
     public function __construct(
         StorageClient $storageClient,
@@ -33,7 +34,8 @@ class Artifacts
         string $branchId,
         string $componentId,
         ?string $configId,
-        string $jobId
+        string $jobId,
+        ?string $orchestrationId = null
     ) {
         $this->storageClient = $storageClient;
         $this->logger = $logger;
@@ -42,6 +44,7 @@ class Artifacts
         $this->componentId = $componentId;
         $this->configId = $configId;
         $this->jobId = $jobId;
+        $this->orchestrationId = $orchestrationId;
     }
 
     public function getFilesystem(): Filesystem
@@ -57,12 +60,40 @@ class Artifacts
 
         $uploaded = [];
         $uploaded[] = $this->uploadArtifact($this->filesystem->getUploadCurrentDir());
-        $uploaded[] = $this->uploadArtifact($this->filesystem->getUploadSharedDir(), ['shared']);
+
+        if ($this->orchestrationId) {
+            $uploaded[] = $this->uploadArtifact($this->filesystem->getUploadSharedDir(), [
+                'shared',
+                sprintf('orchestrationId-%s', $this->orchestrationId),
+            ]);
+        }
 
         return array_filter($uploaded);
     }
 
-    public function downloadLatestRuns(
+    public function download(array $configuration): array
+    {
+        if (!$this->checkConfigId()) {
+            return [];
+        }
+
+        if (!empty($configuration['artifacts']['runs']['enabled'])) {
+            $artifactsConfiguration = $configuration['artifacts'];
+            return $this->downloadRuns(
+                $artifactsConfiguration['runs']['filter']['limit'] ?? null,
+                $artifactsConfiguration['runs']['filter']['date_since'] ?? null,
+            );
+        }
+
+        if (!empty($configuration['artifacts']['shared']['enabled'])) {
+            $artifactsConfiguration = $configuration['artifacts'];
+            return $this->downloadShared();
+        }
+
+        return [];
+    }
+
+    private function downloadRuns(
         ?int $limit = null,
         ?string $dateSince = null
     ): array {
@@ -112,11 +143,42 @@ class Artifacts
         return $result;
     }
 
-    private function fileToResult(int $fileId): array
+    private function downloadShared(): array
     {
-        return [
-            'storageFileId' => $fileId,
-        ];
+        if (!$this->orchestrationId) {
+            return [];
+        }
+
+        $tagsQuery = sprintf(
+            'artifact AND shared AND branchId-%s AND componentId-%s AND configId-%s AND orchestrationId-%s',
+            $this->branchId,
+            $this->componentId,
+            $this->configId,
+            $this->orchestrationId
+        );
+        $query = sprintf('tags:(%s)', $tagsQuery);
+
+        $files = $this->storageClient->listFiles(
+            (new ListFilesOptions())
+                ->setQuery($query)
+        );
+
+        $result = [];
+        foreach ($files as $file) {
+            try {
+                $jobId = StorageFileHelper::getJobIdFromFileTag($file);
+                $dstPath = $this->filesystem->getDownloadSharedJobsDir($jobId);
+                $result[] = $this->downloadArtifact($file, $dstPath);
+            } catch (ArtifactsException $e) {
+                $this->logger->warning(sprintf(
+                    'Error downloading artifact file id "%s": %s',
+                    $file['id'],
+                    $e->getMessage()
+                ));
+            }
+        }
+
+        return $result;
     }
 
     private function uploadArtifact(string $directory, array $addTags = []): ?array
@@ -147,13 +209,29 @@ class Artifacts
         }
     }
 
+    private function downloadArtifact(array $file, string $dstPath): array
+    {
+        $tmpPath = $this->filesystem->getTmpDir() . '/' . $file['id'];
+        $this->storageClient->downloadFile($file['id'], $tmpPath);
+        $this->filesystem->extractArchive($tmpPath, $dstPath);
+
+        return $this->fileToResult($file['id']);
+    }
+
     private function checkConfigId(): bool
     {
         if (is_null($this->configId)) {
-            $this->logger->warning('Skipping upload of artifacts, configuration Id is not set');
+            $this->logger->warning('Ignoring artifacts, configuration Id is not set');
             return false;
         }
 
         return true;
+    }
+
+    private function fileToResult(int $fileId): array
+    {
+        return [
+            'storageFileId' => $fileId,
+        ];
     }
 }

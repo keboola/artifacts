@@ -48,7 +48,7 @@ class ArtifactsTest extends TestCase
     public function testUploadCurrent(): void
     {
         $temp = new Temp();
-        $filesystem = $this->generateArtifacts($temp);
+        $filesystem = $this->generateCurrentArtifacts($temp);
 
         // upload them as current artifacts
         $storageClient = $this->getStorageClient();
@@ -64,7 +64,8 @@ class ArtifactsTest extends TestCase
             $jobId
         );
         $uploadedFiles = $artifacts->upload();
-        $uploadedFile = $uploadedFiles[0];
+        self::assertCount(1, $uploadedFiles);
+        $uploadedFile = current($uploadedFiles);
 
         // wait for file to be available in Storage
         sleep(1);
@@ -126,7 +127,7 @@ class ArtifactsTest extends TestCase
         ;
 
         $temp = new Temp();
-        $this->generateArtifacts($temp);
+        $this->generateCurrentArtifacts($temp);
 
         $artifacts = new Artifacts(
             $storageClientMock,
@@ -188,11 +189,62 @@ class ArtifactsTest extends TestCase
 
         self::assertEmpty($artifacts->upload());
         self::assertTrue($testLogger->hasWarningThatContains(
-            'Skipping upload of artifacts, configuration Id is not set'
+            'Ignoring artifacts, configuration Id is not set'
         ));
     }
 
-    public function testDownloadLatestRuns(): void
+    public function testUploadShared(): void
+    {
+        $temp = new Temp();
+        $filesystem = $this->generateSharedArtifacts($temp);
+
+        // upload them as shared artifacts
+        $storageClient = $this->getStorageClient();
+        $logger = new TestLogger();
+        $jobId = (string) rand(0, 999999);
+        $orchestrationId = (string) rand(0, 999999);
+        $artifacts = new Artifacts(
+            $storageClient,
+            $logger,
+            $temp,
+            'branch-123',
+            'keboola.component',
+            '123',
+            $jobId,
+            $orchestrationId
+        );
+        $uploadedFiles = $artifacts->upload();
+        self::assertCount(1, $uploadedFiles);
+        $uploadedFile = current($uploadedFiles);
+
+        // wait for file to be available in Storage
+        sleep(1);
+
+        $storageFile = $storageClient->listFiles(
+            (new ListFilesOptions())
+                ->setQuery(sprintf('tags:jobId-%d*', $jobId))
+        )[0];
+
+        self::assertSame(['storageFileId' => $storageFile['id']], $uploadedFile);
+        self::assertSame($uploadedFile['storageFileId'], $storageFile['id']);
+        self::assertContains('artifact', $storageFile['tags']);
+        self::assertContains('branchId-branch-123', $storageFile['tags']);
+        self::assertContains('componentId-keboola.component', $storageFile['tags']);
+        self::assertContains('configId-123', $storageFile['tags']);
+        self::assertContains(sprintf('orchestrationId-%s', $orchestrationId), $storageFile['tags']);
+        self::assertContains('shared', $storageFile['tags']);
+
+        $downloadedArtifactPath = '/tmp/downloaded.tar.gz';
+        $storageClient->downloadFile($uploadedFile['storageFileId'], $downloadedArtifactPath);
+        $filesystem->extractArchive($downloadedArtifactPath, '/tmp');
+
+        $file1 = file_get_contents('/tmp/file1');
+        $file2 = file_get_contents('/tmp/folder/file2');
+        self::assertSame('{"foo":"bar"}', $file1);
+        self::assertSame('{"foo":"baz"}', $file2);
+    }
+
+    public function testDownloadRuns(): void
     {
         $storageClient = $this->getStorageClient();
         $logger = new TestLogger();
@@ -200,7 +252,7 @@ class ArtifactsTest extends TestCase
         // generate artifacts for a few jobs
         for ($i=0; $i<10; $i++) {
             $temp = new Temp();
-            $this->generateArtifacts($temp);
+            $this->generateCurrentArtifacts($temp);
 
             $artifacts = new Artifacts(
                 $storageClient,
@@ -216,7 +268,7 @@ class ArtifactsTest extends TestCase
         // another branch, config and component
         for ($i=0; $i<10; $i++) {
             $temp = new Temp();
-            $this->generateArtifacts($temp);
+            $this->generateCurrentArtifacts($temp);
 
             $artifacts = new Artifacts(
                 $storageClient,
@@ -248,7 +300,18 @@ class ArtifactsTest extends TestCase
             $configId,
             (string) rand(0, 999999)
         );
-        $result = $artifacts->downloadLatestRuns($limit, '-1 day');
+        $configuration = [
+            'artifacts' => [
+                'runs' => [
+                    'enabled' => true,
+                    'filter' => [
+                        'limit' => $limit,
+                        'date_since' => '-1 day',
+                    ],
+                ],
+            ],
+        ];
+        $result = $artifacts->download($configuration);
 
         self::assertCount($limit, $result);
         self::assertArrayHasKey('storageFileId', $result[0]);
@@ -284,7 +347,7 @@ class ArtifactsTest extends TestCase
         self::assertEquals($limit, $finder->count());
     }
 
-    public function testDownloadLatestRunsConfigIdNull(): void
+    public function testDownloadConfigIdNull(): void
     {
         $storageClientMock = self::createMock(StorageClient::class);
         $storageClientMock
@@ -304,16 +367,16 @@ class ArtifactsTest extends TestCase
             '123456789',
         );
 
-        self::assertEmpty($artifacts->upload());
+        self::assertEmpty($artifacts->download([]));
         self::assertTrue($testLogger->hasWarningThatContains(
-            'Skipping upload of artifacts, configuration Id is not set'
+            'Ignoring artifacts, configuration Id is not set'
         ));
     }
 
     /**
      * @dataProvider downloadRunsDateSinceProvider
      */
-    public function testDownloadLatestRunsDateSince(
+    public function testDownloadRunsDateSince(
         string $createdSince,
         string $branchId,
         ?int $limit,
@@ -347,7 +410,18 @@ class ArtifactsTest extends TestCase
             '123',
             'job-123'
         );
-        $artifacts->downloadLatestRuns($limit, $createdSince);
+        $configuration = [
+            'artifacts' => [
+                'runs' => [
+                    'enabled' => true,
+                    'filter' => [
+                        'limit' => $limit,
+                        'date_since' => $createdSince,
+                    ],
+                ],
+            ],
+        ];
+        $artifacts->download($configuration);
     }
 
     public function downloadRunsDateSinceProvider(): Generator
@@ -388,12 +462,71 @@ class ArtifactsTest extends TestCase
         ];
     }
 
-    private function generateArtifacts(Temp $temp): Filesystem
+    public function testDownloadShared(): void
+    {
+        $expectedQuery = sprintf(
+            'tags:(artifact AND shared AND branchId-%s AND componentId-%s AND configId-%s AND orchestrationId-%s)',
+            'default',
+            'keboola.component',
+            '123',
+            '99999'
+        );
+
+        $storageClientMock = self::createMock(StorageClient::class);
+        $storageClientMock
+            ->expects(self::once())
+            ->method('listFiles')
+            ->with((new ListFilesOptions())->setQuery($expectedQuery))
+            ->willReturn([]);
+
+        $logger = new TestLogger();
+        $temp = new Temp();
+        $artifacts = new Artifacts(
+            $storageClientMock,
+            $logger,
+            $temp,
+            'default',
+            'keboola.component',
+            '123',
+            'job-123',
+            '99999'
+        );
+        $configuration = [
+            'artifacts' => [
+                'shared' => [
+                    'enabled' => true,
+                ],
+            ],
+        ];
+        $artifacts->download($configuration);
+    }
+
+    private function generateCurrentArtifacts(Temp $temp): Filesystem
     {
         $artifactsFilesystem = new Filesystem($temp);
 
         $filePath1 = $artifactsFilesystem->getUploadCurrentDir() . '/file1';
         $filePath2 = $artifactsFilesystem->getUploadCurrentDir() . '/folder/file2';
+        $filesystem = new SymfonyFilesystem();
+
+        // create some files
+        $filesystem->dumpFile($filePath1, (string) json_encode([
+            'foo' => 'bar',
+        ]));
+
+        $filesystem->dumpFile($filePath2, (string) json_encode([
+            'foo' => 'baz',
+        ]));
+
+        return $artifactsFilesystem;
+    }
+
+    private function generateSharedArtifacts(Temp $temp): Filesystem
+    {
+        $artifactsFilesystem = new Filesystem($temp);
+
+        $filePath1 = $artifactsFilesystem->getUploadSharedDir() . '/file1';
+        $filePath2 = $artifactsFilesystem->getUploadSharedDir() . '/folder/file2';
         $filesystem = new SymfonyFilesystem();
 
         // create some files

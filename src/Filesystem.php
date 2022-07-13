@@ -84,6 +84,11 @@ class Filesystem
         return $this->downloadSharedDir;
     }
 
+    public function getDownloadSharedJobsDir(string $jobId): string
+    {
+        return sprintf('%s/%s', $this->downloadSharedDir, $jobId);
+    }
+
     public function getDownloadCustomDir(): string
     {
         return $this->downloadCustomDir;
