@@ -148,10 +148,8 @@ class Artifacts
         }
 
         $tagsQuery = sprintf(
-            'artifact AND shared AND branchId-%s AND componentId-%s AND configId-%s AND orchestrationId-%s',
+            'artifact AND shared AND branchId-%s AND orchestrationId-%s',
             $this->branchId,
-            $this->componentId,
-            $this->configId,
             $this->orchestrationId
         );
         $query = sprintf('tags:(%s)', $tagsQuery);
