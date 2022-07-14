@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Keboola\Artifacts;
 
 use DateTime;
-use JetBrains\PhpStorm\ArrayShape;
 use Keboola\StorageApi\Client as StorageClient;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\FileUploadOptions;
@@ -86,7 +85,6 @@ class Artifacts
         }
 
         if (!empty($configuration['artifacts']['shared']['enabled'])) {
-            $artifactsConfiguration = $configuration['artifacts'];
             return $this->downloadShared();
         }
 

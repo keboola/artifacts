@@ -40,14 +40,14 @@ class FilesystemTest extends TestCase
         $path = $artifactsFilesystem->getUploadCurrentDir();
         self::assertDirectoryExists($path);
         self::assertSame(
-            sprintf('%s/data/artifacts/upload/current', $temp->getTmpFolder()),
+            sprintf('%s/data/artifacts/out/current', $temp->getTmpFolder()),
             $path
         );
 
         $path = $artifactsFilesystem->getDownloadRunsDir();
         self::assertDirectoryDoesNotExist($path);
         self::assertSame(
-            sprintf('%s/data/artifacts/download/runs', $temp->getTmpFolder()),
+            sprintf('%s/data/artifacts/in/runs', $temp->getTmpFolder()),
             $path
         );
 

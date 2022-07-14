@@ -29,10 +29,10 @@ class Filesystem
         $this->dataDir = $temp->getTmpFolder() . '/data';
         $this->archivePath = $temp->getTmpFolder() . '/tmp/artifacts.tar.gz';
         $this->artifactsDir = $this->dataDir . '/artifacts';
-        $this->uploadDir = $this->artifactsDir . '/upload';
+        $this->uploadDir = $this->artifactsDir . '/out';
         $this->uploadCurrentDir = $this->uploadDir . '/current';
         $this->uploadSharedDir = $this->uploadDir . '/shared';
-        $this->downloadDir = $this->artifactsDir . '/download';
+        $this->downloadDir = $this->artifactsDir . '/in';
         $this->downloadRunsDir = $this->downloadDir . '/runs';
         $this->downloadSharedDir = $this->downloadDir . '/shared';
         $this->downloadCustomDir = $this->downloadDir . '/custom';
