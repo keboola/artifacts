@@ -51,6 +51,34 @@ class FilesystemTest extends TestCase
             $path
         );
 
+        $path = $artifactsFilesystem->getDownloadRunsJobDir('123');
+        self::assertDirectoryDoesNotExist($path);
+        self::assertSame(
+            sprintf('%s/data/artifacts/in/runs/123', $temp->getTmpFolder()),
+            $path
+        );
+
+        $path = $artifactsFilesystem->getDownloadSharedDir();
+        self::assertDirectoryDoesNotExist($path);
+        self::assertSame(
+            sprintf('%s/data/artifacts/in/shared', $temp->getTmpFolder()),
+            $path
+        );
+
+        $path = $artifactsFilesystem->getDownloadSharedJobsDir('1234');
+        self::assertDirectoryDoesNotExist($path);
+        self::assertSame(
+            sprintf('%s/data/artifacts/in/shared/1234', $temp->getTmpFolder()),
+            $path
+        );
+
+        $path = $artifactsFilesystem->getDownloadCustomDir();
+        self::assertDirectoryDoesNotExist($path);
+        self::assertSame(
+            sprintf('%s/data/artifacts/in/custom', $temp->getTmpFolder()),
+            $path
+        );
+
         $path = $artifactsFilesystem->getArchivePath();
         self::assertFileDoesNotExist($path);
         self::assertSame(
