@@ -45,7 +45,7 @@ class ArtifactsTest extends TestCase
         );
     }
 
-    public function testUploadCurrent(): void
+    public function testUpload(): void
     {
         $temp = new Temp();
         $filesystem = new Filesystem($temp);
@@ -93,7 +93,7 @@ class ArtifactsTest extends TestCase
         self::assertSame('{"foo":"baz"}', $file2);
     }
 
-    public function uploadCurrentExceptionsHandlingData(): iterable
+    public function uploadExceptionsHandlingData(): iterable
     {
         yield 'ProcessFailedException convert' => [
             new ProcessFailedException(self::createMock(Process::class)),
@@ -113,10 +113,10 @@ class ArtifactsTest extends TestCase
     }
 
     /**
-     * @dataProvider uploadCurrentExceptionsHandlingData
+     * @dataProvider uploadExceptionsHandlingData
      * @param class-string<Throwable> $expectedException
      */
-    public function testUploadCurrentExceptionsHandling(
+    public function testUploadExceptionsHandling(
         Throwable $exception,
         string $expectedException,
         string $expectedExceptionMessage
@@ -146,7 +146,7 @@ class ArtifactsTest extends TestCase
         $artifacts->upload();
     }
 
-    public function testUploadCurrentDoNotUploadIfNoFileExists(): void
+    public function testUploadDoNotUploadIfNoFileExists(): void
     {
         $storageClientMock = self::createMock(StorageClient::class);
         $storageClientMock
@@ -168,7 +168,7 @@ class ArtifactsTest extends TestCase
         self::assertEmpty($artifacts->upload());
     }
 
-    public function testUploadCurrentConfigIdNull(): void
+    public function testUploadConfigIdNull(): void
     {
         $storageClientMock = self::createMock(StorageClient::class);
         $storageClientMock
