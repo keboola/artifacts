@@ -50,11 +50,14 @@ class ArtifactsTest extends TestCase
         $temp = new Temp();
         $filesystem = new Filesystem($temp);
         $this->generateArtifacts($filesystem->getUploadCurrentDir());
+        $this->generateArtifacts($filesystem->getUploadSharedDir());
 
-        // upload them as current artifacts
+        // upload the artifacts
         $storageClient = $this->getStorageClient();
         $logger = new TestLogger();
         $jobId = (string) rand(0, 999999);
+        $orchestrationId = (string) rand(0, 999999);
+
         $artifacts = new Artifacts(
             $storageClient,
             $logger,
@@ -62,29 +65,59 @@ class ArtifactsTest extends TestCase
             'branch-123',
             'keboola.component',
             '123',
-            $jobId
+            $jobId,
+            $orchestrationId
         );
         $uploadedFiles = $artifacts->upload();
-        self::assertCount(1, $uploadedFiles);
-        $uploadedFile = current($uploadedFiles);
+        self::assertCount(2, $uploadedFiles);
+        $uploadedFileCurrent = array_shift($uploadedFiles);
+        $uploadedFileShared = array_shift($uploadedFiles);
 
         // wait for file to be available in Storage
         sleep(1);
 
-        $storageFile = $storageClient->listFiles(
+        // current file
+        $storageFiles = $storageClient->listFiles(
             (new ListFilesOptions())
-                ->setQuery(sprintf('tags:jobId-%d*', $jobId))
-        )[0];
+                ->setQuery(sprintf('tags:(jobId-%d* NOT shared)', $jobId))
+        );
+        self::assertCount(1, $storageFiles);
+        $storageFile = current($storageFiles);
 
-        self::assertSame(['storageFileId' => $storageFile['id']], $uploadedFile);
-        self::assertSame($uploadedFile['storageFileId'], $storageFile['id']);
+        self::assertSame(['storageFileId' => $storageFile['id']], $uploadedFileCurrent);
+        self::assertSame($uploadedFileCurrent['storageFileId'], $storageFile['id']);
         self::assertContains('artifact', $storageFile['tags']);
         self::assertContains('branchId-branch-123', $storageFile['tags']);
         self::assertContains('componentId-keboola.component', $storageFile['tags']);
         self::assertContains('configId-123', $storageFile['tags']);
 
         $downloadedArtifactPath = '/tmp/downloaded.tar.gz';
-        $storageClient->downloadFile($uploadedFile['storageFileId'], $downloadedArtifactPath);
+        $storageClient->downloadFile($uploadedFileCurrent['storageFileId'], $downloadedArtifactPath);
+        $filesystem->extractArchive($downloadedArtifactPath, '/tmp');
+
+        $file1 = file_get_contents('/tmp/file1');
+        $file2 = file_get_contents('/tmp/folder/file2');
+        self::assertSame('{"foo":"bar"}', $file1);
+        self::assertSame('{"foo":"baz"}', $file2);
+
+        // shared file
+        $storageFiles = $storageClient->listFiles(
+            (new ListFilesOptions())
+                ->setQuery(sprintf('tags:(jobId-%d* AND orchestrationId-%s)', $jobId, $orchestrationId))
+        );
+        self::assertCount(1, $storageFiles);
+        $storageFile = current($storageFiles);
+
+        self::assertSame(['storageFileId' => $storageFile['id']], $uploadedFileShared);
+        self::assertSame($uploadedFileShared['storageFileId'], $storageFile['id']);
+        self::assertContains('artifact', $storageFile['tags']);
+        self::assertContains('branchId-branch-123', $storageFile['tags']);
+        self::assertContains('componentId-keboola.component', $storageFile['tags']);
+        self::assertContains('configId-123', $storageFile['tags']);
+        self::assertContains(sprintf('orchestrationId-%s', $orchestrationId), $storageFile['tags']);
+        self::assertContains('shared', $storageFile['tags']);
+
+        $storageClient->downloadFile($uploadedFileShared['storageFileId'], $downloadedArtifactPath);
         $filesystem->extractArchive($downloadedArtifactPath, '/tmp');
 
         $file1 = file_get_contents('/tmp/file1');
@@ -194,58 +227,6 @@ class ArtifactsTest extends TestCase
         ));
     }
 
-    public function testUploadShared(): void
-    {
-        $temp = new Temp();
-        $filesystem = new Filesystem($temp);
-        $this->generateArtifacts($filesystem->getUploadSharedDir());
-
-        // upload them as shared artifacts
-        $storageClient = $this->getStorageClient();
-        $logger = new TestLogger();
-        $jobId = (string) rand(0, 999999);
-        $orchestrationId = (string) rand(0, 999999);
-        $artifacts = new Artifacts(
-            $storageClient,
-            $logger,
-            $temp,
-            'branch-123',
-            'keboola.component',
-            '123',
-            $jobId,
-            $orchestrationId
-        );
-        $uploadedFiles = $artifacts->upload();
-        self::assertCount(1, $uploadedFiles);
-        $uploadedFile = current($uploadedFiles);
-
-        // wait for file to be available in Storage
-        sleep(1);
-
-        $storageFile = $storageClient->listFiles(
-            (new ListFilesOptions())
-                ->setQuery(sprintf('tags:jobId-%d*', $jobId))
-        )[0];
-
-        self::assertSame(['storageFileId' => $storageFile['id']], $uploadedFile);
-        self::assertSame($uploadedFile['storageFileId'], $storageFile['id']);
-        self::assertContains('artifact', $storageFile['tags']);
-        self::assertContains('branchId-branch-123', $storageFile['tags']);
-        self::assertContains('componentId-keboola.component', $storageFile['tags']);
-        self::assertContains('configId-123', $storageFile['tags']);
-        self::assertContains(sprintf('orchestrationId-%s', $orchestrationId), $storageFile['tags']);
-        self::assertContains('shared', $storageFile['tags']);
-
-        $downloadedArtifactPath = '/tmp/downloaded.tar.gz';
-        $storageClient->downloadFile($uploadedFile['storageFileId'], $downloadedArtifactPath);
-        $filesystem->extractArchive($downloadedArtifactPath, '/tmp');
-
-        $file1 = file_get_contents('/tmp/file1');
-        $file2 = file_get_contents('/tmp/folder/file2');
-        self::assertSame('{"foo":"bar"}', $file1);
-        self::assertSame('{"foo":"baz"}', $file2);
-    }
-
     public function testDownloadRuns(): void
     {
         $storageClient = $this->getStorageClient();
@@ -325,7 +306,7 @@ class ArtifactsTest extends TestCase
         int $expectedLimit
     ): void {
         $expectedQuery = sprintf(
-            'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s) AND created:>%s',
+            'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s NOT shared) AND created:>%s',
             $branchId,
             'keboola.component',
             '123',

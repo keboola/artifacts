@@ -101,7 +101,7 @@ class Artifacts
         }
 
         $query = sprintf(
-            'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s)',
+            'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s NOT shared)',
             $this->branchId,
             $this->componentId,
             $this->configId

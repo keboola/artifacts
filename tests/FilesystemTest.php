@@ -44,6 +44,13 @@ class FilesystemTest extends TestCase
             $path
         );
 
+        $path = $artifactsFilesystem->getUploadSharedDir();
+        self::assertDirectoryExists($path);
+        self::assertSame(
+            sprintf('%s/data/artifacts/out/shared', $temp->getTmpFolder()),
+            $path
+        );
+
         $path = $artifactsFilesystem->getDownloadRunsDir();
         self::assertDirectoryDoesNotExist($path);
         self::assertSame(
