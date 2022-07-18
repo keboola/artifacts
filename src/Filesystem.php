@@ -94,6 +94,11 @@ class Filesystem
         return $this->downloadCustomDir;
     }
 
+    public function getDownloadCustomJobsDir(string $jobId): string
+    {
+        return sprintf('%s/%s', $this->downloadCustomDir, $jobId);
+    }
+
     public function getArchivePath(): string
     {
         return $this->archivePath;

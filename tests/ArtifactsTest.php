@@ -9,6 +9,7 @@ use Generator;
 use Keboola\Artifacts\Artifacts;
 use Keboola\Artifacts\ArtifactsException;
 use Keboola\Artifacts\Filesystem;
+use Keboola\Artifacts\Tags;
 use Keboola\StorageApi\Client as StorageClient;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\ListFilesOptions;
@@ -36,11 +37,7 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             self::createMock(StorageClient::class),
             self::createMock(Logger::class),
-            $temp,
-            'main-branch',
-            'keboola.orchestrator',
-            '123456',
-            '123456789',
+            $temp
         );
 
         self::assertSame(
@@ -64,14 +61,15 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $storageClient,
             new NullLogger(),
-            $temp,
+            $temp
+        );
+        $uploadedFiles = $artifacts->upload(new Tags(
             'branch-123',
             'keboola.component',
             '123',
             $jobId,
             $orchestrationId
-        );
-        $uploadedFiles = $artifacts->upload();
+        ));
 
         self::assertCount($uploadedFilesCount, $uploadedFiles);
         $uploadedFileCurrent = array_shift($uploadedFiles);
@@ -170,17 +168,18 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $storageClientMock,
             self::createMock(Logger::class),
-            $temp,
-            'keboola.orchestrator',
-            '123456',
-            '123456789',
-            (string) rand(0, 99999)
+            $temp
         );
 
         $this->expectException($expectedException);
         $this->expectExceptionMessage($expectedExceptionMessage);
 
-        $artifacts->upload();
+        $artifacts->upload(new Tags(
+            'keboola.orchestrator',
+            '123456',
+            '123456789',
+            (string) rand(0, 99999)
+        ));
     }
 
     public function testUploadDoNotUploadIfNoFileExists(): void
@@ -195,14 +194,15 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $storageClientMock,
             self::createMock(Logger::class),
-            $temp,
+            $temp
+        );
+
+        self::assertEmpty($artifacts->upload(new Tags(
             'main-branch',
             'keboola.orchestrator',
             '123456',
-            '123456789',
-        );
-
-        self::assertEmpty($artifacts->upload());
+            '123456789'
+        )));
     }
 
     public function testUploadConfigIdNull(): void
@@ -218,14 +218,15 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $storageClientMock,
             $testLogger,
-            new Temp(),
-            'main-branch',
-            'keboola.orchestrator',
-            null,
-            '123456789',
+            new Temp()
         );
 
-        self::assertEmpty($artifacts->upload());
+        self::assertEmpty($artifacts->upload(new Tags(
+            'main-branch',
+            'keboola.orchestrator',
+            '123456',
+            '123456789'
+        )));
         self::assertTrue($testLogger->hasWarningThatContains(
             'Ignoring artifacts, configuration Id is not set'
         ));
@@ -262,14 +263,15 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $this->getStorageClient(),
             $logger,
-            $temp,
+            $temp
+        );
+
+        $result = $artifacts->download(new Tags(
             $branchId,
             $componentId,
             $configId,
             (string) rand(0, 999999)
-        );
-
-        $result = $artifacts->download($configuration);
+        ), $configuration);
 
         self::assertCount($expectedCount, $result);
         self::assertArrayHasKey('storageFileId', $result[0]);
@@ -372,13 +374,14 @@ class ArtifactsTest extends TestCase
             $storageClientMock,
             $testLogger,
             new Temp(),
+        );
+
+        self::assertEmpty($artifacts->download(new Tags(
             'main-branch',
             'keboola.orchestrator',
             null,
-            '123456789',
-        );
-
-        self::assertEmpty($artifacts->download([]));
+            '123456789'
+        ), []));
         self::assertTrue($testLogger->hasWarningThatContains(
             'Ignoring artifacts, configuration Id is not set'
         ));
@@ -415,11 +418,7 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $storageClientMock,
             $logger,
-            $temp,
-            $branchId,
-            'keboola.component',
-            '123',
-            'job-123'
+            $temp
         );
         $configuration = [
             'artifacts' => [
@@ -432,7 +431,12 @@ class ArtifactsTest extends TestCase
                 ],
             ],
         ];
-        $artifacts->download($configuration);
+        $artifacts->download(new Tags(
+            $branchId,
+            'keboola.component',
+            '123',
+            'job-123'
+        ), $configuration);
     }
 
     public function downloadRunsDateSinceProvider(): Generator
