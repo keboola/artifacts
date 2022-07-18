@@ -15,6 +15,7 @@ use Keboola\StorageApi\Options\ListFilesOptions;
 use Keboola\Temp\Temp;
 use Monolog\Logger;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 use Psr\Log\Test\TestLogger;
 use RangeException;
 use Symfony\Component\Filesystem\Filesystem as SymfonyFilesystem;
@@ -25,6 +26,9 @@ use Throwable;
 
 class ArtifactsTest extends TestCase
 {
+    private const TYPE_CURRENT = 'current';
+    private const TYPE_SHARED = 'shared';
+
     public function testGetFilesystem(): void
     {
         $temp = new Temp();
@@ -50,17 +54,16 @@ class ArtifactsTest extends TestCase
     {
         $temp = new Temp();
         $filesystem = new Filesystem($temp);
-        $this->generateArtifacts($filesystem->getUploadCurrentDir());
-        $this->generateArtifacts($filesystem->getUploadSharedDir());
+        $jobId = (string) rand(0, 999999);
+        $storageClient = $this->getStorageClient();
 
         // upload the artifacts
-        $storageClient = $this->getStorageClient();
-        $logger = new TestLogger();
-        $jobId = (string) rand(0, 999999);
+        $this->generateArtifacts($temp, self::TYPE_CURRENT);
+        $this->generateArtifacts($temp, self::TYPE_SHARED);
 
         $artifacts = new Artifacts(
             $storageClient,
-            $logger,
+            new NullLogger(),
             $temp,
             'branch-123',
             'keboola.component',
@@ -69,6 +72,7 @@ class ArtifactsTest extends TestCase
             $orchestrationId
         );
         $uploadedFiles = $artifacts->upload();
+
         self::assertCount($uploadedFilesCount, $uploadedFiles);
         $uploadedFileCurrent = array_shift($uploadedFiles);
         $uploadedFileShared = array_shift($uploadedFiles);
@@ -161,16 +165,16 @@ class ArtifactsTest extends TestCase
         ;
 
         $temp = new Temp();
-        $this->generateArtifacts((new Filesystem($temp))->getUploadCurrentDir());
+        $this->generateArtifacts($temp, self::TYPE_CURRENT);
 
         $artifacts = new Artifacts(
             $storageClientMock,
             self::createMock(Logger::class),
             $temp,
-            'main-branch',
             'keboola.orchestrator',
             '123456',
             '123456789',
+            (string) rand(0, 99999)
         );
 
         $this->expectException($expectedException);
@@ -227,47 +231,131 @@ class ArtifactsTest extends TestCase
         ));
     }
 
-    public function testDownloadRuns(): void
-    {
-        $storageClient = $this->getStorageClient();
-        $logger = new TestLogger();
-
+    /** @dataProvider downloadRunsProvider */
+    public function testDownloadRuns(
+        string $branchId,
+        string $componentId,
+        string $configId,
+        array $configuration,
+        int $expectedCount
+    ): void {
         // generate artifacts for a few jobs
-        for ($i=0; $i<10; $i++) {
-            $temp = new Temp();
-            $this->generateArtifacts((new Filesystem($temp))->getUploadCurrentDir());
+        $this->generateAndUploadArtifacts(
+            'branch-123',
+            'keboola.component',
+            '123',
+            null,
+            5
+        );
 
-            $artifacts = new Artifacts(
-                $storageClient,
-                $logger,
-                $temp,
-                'branch-123',
-                'keboola.component',
-                '123',
-                (string) rand(0, 999999)
-            );
-            $artifacts->upload();
-        }
         // another branch, config and component
-        for ($i=0; $i<10; $i++) {
-            $temp = new Temp();
-            $this->generateArtifacts((new Filesystem($temp))->getUploadCurrentDir());
+        $this->generateAndUploadArtifacts(
+            'default',
+            'keboola.component-2',
+            '456',
+            null,
+            5
+        );
 
-            $artifacts = new Artifacts(
-                $storageClient,
-                $logger,
-                $temp,
-                'default',
-                'keboola.component-2',
-                '456',
-                (string) rand(0, 999999)
-            );
-            $artifacts->upload();
-        }
+        $logger = new TestLogger();
+        $temp = new Temp();
+        $artifacts = new Artifacts(
+            $this->getStorageClient(),
+            $logger,
+            $temp,
+            $branchId,
+            $componentId,
+            $configId,
+            (string) rand(0, 999999)
+        );
 
-        $this->downloadAndAssertRuns('branch-123', 'keboola.component', '123', 5);
+        $result = $artifacts->download($configuration);
 
-        $this->downloadAndAssertRuns('default', 'keboola.component-2', '456', 3);
+        self::assertCount($expectedCount, $result);
+        self::assertArrayHasKey('storageFileId', $result[0]);
+
+        $this->assertFilesAndContent($artifacts->getFilesystem()->getDownloadRunsDir(), $expectedCount);
+    }
+
+    public function downloadRunsProvider(): Generator
+    {
+        yield 'runs' => [
+            'branch' => 'branch-123',
+            'component' => 'keboola.component',
+            'configId' => '123',
+            'configuration' => [
+                'artifacts' => [
+                    'runs' => [
+                        'enabled' => true,
+                        'filter' => [
+                            'limit' => 3,
+                            'date_since' => '-1 day',
+                        ],
+                    ],
+                ],
+            ],
+            'expectedCount' => 3,
+        ];
+
+        yield 'runs 2' => [
+            'branch' => 'default',
+            'component' => 'keboola.component-2',
+            'configId' => '456',
+            'configuration' => [
+                'artifacts' => [
+                    'runs' => [
+                        'enabled' => true,
+                        'filter' => [
+                            'limit' => 2,
+                            'date_since' => '-1 day',
+                        ],
+                    ],
+                ],
+            ],
+            'expectedCount' => 2,
+        ];
+
+        yield 'custom' => [
+            'branch' => 'branch-3',
+            'component' => 'branch-3',
+            'config' => '789',
+            'configuration' => [
+                'artifacts' => [
+                    'custom' => [
+                        'enabled' => true,
+                        'filter' => [
+                            'branch_id' => 'default',
+                            'component_id' => 'keboola.component-2',
+                            'config_id' => '456',
+                            'limit' => 3,
+                            'date_since' => '-1 day',
+                        ],
+                    ],
+                ],
+            ],
+            'expectedCount' => 3,
+        ];
+
+        yield 'custom 2' => [
+            'branch' => 'default',
+            'component' => 'keboola.component',
+            'configId' => '999',
+            'configuration' => [
+                'artifacts' => [
+                    'custom' => [
+                        'enabled' => true,
+                        'filter' => [
+                            'branch_id' => 'branch-123',
+                            'component_id' => 'keboola.component',
+                            'config_id' => '123',
+                            'limit' => 2,
+                            'date_since' => '-1 day',
+                        ],
+                    ],
+                ],
+            ],
+            'expectedCount' => 2,
+        ];
     }
 
     public function testDownloadConfigIdNull(): void
@@ -426,86 +514,87 @@ class ArtifactsTest extends TestCase
     {
         $orchestrationId = (string) rand(0, 999999);
         $orchestrationId2 = (string) rand(0, 999999);
-        $storageClient = $this->getStorageClient();
-        $logger = new TestLogger();
 
         // generate shared artifacts for a few jobs
-        for ($i=0; $i<3; $i++) {
-            $temp = new Temp();
-            $this->generateArtifacts((new Filesystem($temp))->getUploadSharedDir());
+        $this->generateAndUploadArtifacts(
+            'default',
+            'keboola.component',
+            '123',
+            $orchestrationId,
+            3,
+            self::TYPE_SHARED
+        );
 
-            $artifacts = new Artifacts(
-                $storageClient,
-                $logger,
-                $temp,
-                'default',
-                'keboola.component',
-                '123',
-                (string) rand(0, 999999),
-                $orchestrationId
-            );
-            $artifacts->upload();
-        }
         // another config and component
-        for ($i=0; $i<3; $i++) {
-            $temp = new Temp();
-            $this->generateArtifacts((new Filesystem($temp))->getUploadSharedDir());
-
-            $artifacts = new Artifacts(
-                $storageClient,
-                $logger,
-                $temp,
-                'default',
-                'keboola.component-2',
-                '456',
-                (string) rand(0, 999999),
-                $orchestrationId
-            );
-            $artifacts->upload();
-        }
+        $this->generateAndUploadArtifacts(
+            'default',
+            'keboola.component-2',
+            '456',
+            $orchestrationId,
+            3,
+            self::TYPE_SHARED
+        );
 
         // another branch and orchestrationId
-        for ($i=0; $i<3; $i++) {
-            $temp = new Temp();
-            $this->generateArtifacts((new Filesystem($temp))->getUploadSharedDir());
-
-            $artifacts = new Artifacts(
-                $storageClient,
-                $logger,
-                $temp,
-                'branch-123',
-                'keboola.component-2',
-                '456',
-                (string) rand(0, 999999),
-                $orchestrationId2
-            );
-            $artifacts->upload();
-        }
+        $this->generateAndUploadArtifacts(
+            'branch-123',
+            'keboola.component-2',
+            '456',
+            $orchestrationId2,
+            3,
+            self::TYPE_SHARED
+        );
 
         // same branch another orchestrationId
-        for ($i=0; $i<3; $i++) {
-            $temp = new Temp();
-            $this->generateArtifacts((new Filesystem($temp))->getUploadSharedDir());
-
-            $artifacts = new Artifacts(
-                $storageClient,
-                $logger,
-                $temp,
-                'default',
-                'keboola.component-2',
-                '456',
-                (string) rand(0, 999999),
-                $orchestrationId2
-            );
-            $artifacts->upload();
-        }
+        $this->generateAndUploadArtifacts(
+            'default',
+            'keboola.component-2',
+            '456',
+            $orchestrationId2,
+            3,
+            self::TYPE_SHARED
+        );
 
         $this->downloadAndAssertShared('default', $orchestrationId, 6);
         $this->downloadAndAssertShared('branch-123', $orchestrationId2, 3);
     }
 
-    private function generateArtifacts(string $uploadDir): void
+    private function generateAndUploadArtifacts(
+        string $branchId,
+        string $componentId,
+        string $configId,
+        ?string $orchestrationId,
+        int $count,
+        string $type = self::TYPE_CURRENT
+    ): void {
+        $storageClient = $this->getStorageClient();
+        for ($i=0; $i<$count; $i++) {
+            $temp = new Temp();
+            $this->generateArtifacts($temp, $type);
+
+            $artifacts = new Artifacts(
+                $storageClient,
+                new NullLogger(),
+                $temp,
+                $branchId,
+                $componentId,
+                $configId,
+                (string) rand(0, 999999),
+                $orchestrationId
+            );
+            $artifacts->upload();
+        }
+    }
+
+    private function generateArtifacts(Temp $temp, string $type): void
     {
+        $artifactsFs = new Filesystem($temp);
+
+        $uploadDir = $artifactsFs->getUploadCurrentDir();
+        if ($type === self::TYPE_SHARED) {
+            $uploadDir = $artifactsFs->getUploadSharedDir();
+        }
+
         $filePath1 = $uploadDir . '/file1';
         $filePath2 = $uploadDir . '/folder/file2';
         $filesystem = new SymfonyFilesystem();
@@ -518,38 +607,6 @@ class ArtifactsTest extends TestCase
         $filesystem->dumpFile($filePath2, (string) json_encode([
             'foo' => 'baz',
         ]));
-    }
-
-    private function downloadAndAssertRuns(string $branchId, string $componentId, string $configId, int $limit): void
-    {
-        $logger = new TestLogger();
-        $temp = new Temp();
-        $artifacts = new Artifacts(
-            $this->getStorageClient(),
-            $logger,
-            $temp,
-            $branchId,
-            $componentId,
-            $configId,
-            (string) rand(0, 999999)
-        );
-        $configuration = [
-            'artifacts' => [
-                'runs' => [
-                    'enabled' => true,
-                    'filter' => [
-                        'limit' => $limit,
-                        'date_since' => '-1 day',
-                    ],
-                ],
-            ],
-        ];
-        $result = $artifacts->download($configuration);
-
-        self::assertCount($limit, $result);
-        self::assertArrayHasKey('storageFileId', $result[0]);
-
-        $this->assertFilesAndContent($artifacts->getFilesystem()->getDownloadRunsDir(), $limit);
     }
 
     private function downloadAndAssertShared(

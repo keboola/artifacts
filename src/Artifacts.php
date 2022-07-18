@@ -9,6 +9,7 @@ use Keboola\StorageApi\Client as StorageClient;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\FileUploadOptions;
 use Keboola\StorageApi\Options\ListFilesOptions;
+use Keboola\StorageApiBranch\ClientWrapper;
 use Keboola\Temp\Temp;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Finder\Finder;
@@ -77,10 +78,24 @@ class Artifacts
         }
 
         if (!empty($configuration['artifacts']['runs']['enabled'])) {
-            $artifactsConfiguration = $configuration['artifacts'];
+            $artifactsRunsConfiguration = $configuration['artifacts']['runs'];
             return $this->downloadRuns(
-                $artifactsConfiguration['runs']['filter']['limit'] ?? null,
-                $artifactsConfiguration['runs']['filter']['date_since'] ?? null,
+                $this->componentId,
+                $this->configId,
+                $this->branchId,
+                $artifactsRunsConfiguration['filter']['limit'] ?? null,
+                $artifactsRunsConfiguration['filter']['date_since'] ?? null,
+            );
+        }
+
+        if (!empty($configuration['artifacts']['custom']['enabled'])) {
+            $artifactsCustomConfiguration = $configuration['artifacts']['custom'];
+            return $this->downloadRuns(
+                $artifactsCustomConfiguration['filter']['component_id'],
+                $artifactsCustomConfiguration['filter']['config_id'],
+                $artifactsCustomConfiguration['filter']['branch_id'] ?? ClientWrapper::BRANCH_DEFAULT,
+                $artifactsCustomConfiguration['filter']['limit'] ?? null,
+                $artifactsCustomConfiguration['filter']['date_since'] ?? null,
             );
         }
 
@@ -92,19 +107,22 @@ class Artifacts
     }
 
     private function downloadRuns(
+        string $componentId,
+        ?string $configId,
+        string $branchId,
         ?int $limit = null,
         ?string $dateSince = null
     ): array {
-        if (is_null($this->configId)) {
+        if (is_null($configId)) {
             $this->logger->warning('Skipping download of artifacts, configuration Id is not set');
             return [];
         }
 
         $query = sprintf(
             'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s NOT shared)',
-            $this->branchId,
-            $this->componentId,
-            $this->configId
+            $branchId,
+            $componentId,
+            $configId
         );
         if ($dateSince) {
             $dateUTC = (new DateTime($dateSince))->format('Y-m-d');
