@@ -215,16 +215,17 @@ class ArtifactsTest extends TestCase
 
         $testLogger = new TestLogger();
 
+        $temp = new Temp();
         $artifacts = new Artifacts(
             $storageClientMock,
             $testLogger,
-            new Temp()
+            $temp
         );
 
         self::assertEmpty($artifacts->upload(new Tags(
             'main-branch',
             'keboola.orchestrator',
-            '123456',
+            null,
             '123456789'
         )));
         self::assertTrue($testLogger->hasWarningThatContains(
@@ -276,7 +277,11 @@ class ArtifactsTest extends TestCase
         self::assertCount($expectedCount, $result);
         self::assertArrayHasKey('storageFileId', $result[0]);
 
-        $this->assertFilesAndContent($artifacts->getFilesystem()->getDownloadRunsDir(), $expectedCount);
+        $downloadDir = empty($configuration['artifacts']['custom']['enabled'])
+            ? $artifacts->getFilesystem()->getDownloadRunsDir()
+            : $artifacts->getFilesystem()->getDownloadCustomDir();
+
+        $this->assertFilesAndContent($downloadDir, $expectedCount);
     }
 
     public function downloadRunsProvider(): Generator
@@ -497,12 +502,7 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $storageClientMock,
             $logger,
-            $temp,
-            'default',
-            'keboola.component',
-            '123',
-            'job-123',
-            '99999'
+            $temp
         );
         $configuration = [
             'artifacts' => [
@@ -511,7 +511,13 @@ class ArtifactsTest extends TestCase
                 ],
             ],
         ];
-        $artifacts->download($configuration);
+        $artifacts->download(new Tags(
+            'default',
+            'keboola.component',
+            '123',
+            'job-123',
+            '99999'
+        ), $configuration);
     }
 
     public function testDownloadShared(): void
@@ -579,14 +585,15 @@ class ArtifactsTest extends TestCase
             $artifacts = new Artifacts(
                 $storageClient,
                 new NullLogger(),
-                $temp,
+                $temp
+            );
+            $artifacts->upload(new Tags(
                 $branchId,
                 $componentId,
                 $configId,
                 (string) rand(0, 999999),
                 $orchestrationId
-            );
-            $artifacts->upload();
+            ));
         }
     }
 
@@ -623,20 +630,24 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $this->getStorageClient(),
             $logger,
-            $temp,
-            $branchId,
-            'keboola.some-component',
-            'some-config',
-            (string) rand(0, 999999),
-            $orchestrationId
+            $temp
         );
-        $result = $artifacts->download([
-            'artifacts' => [
-                'shared' => [
-                    'enabled' => true,
+        $result = $artifacts->download(
+            new Tags(
+                $branchId,
+                'keboola.some-component',
+                'some-config',
+                (string) rand(0, 999999),
+                $orchestrationId
+            ),
+            [
+                'artifacts' => [
+                    'shared' => [
+                        'enabled' => true,
+                    ],
                 ],
-            ],
-        ]);
+            ]
+        );
 
         self::assertCount($count, $result);
         self::assertArrayHasKey('storageFileId', $result[0]);

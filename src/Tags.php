@@ -43,7 +43,7 @@ class Tags
         return $this->configId;
     }
 
-    public function getJobId(): string
+    public function getJobId(): ?string
     {
         return $this->jobId;
     }

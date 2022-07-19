@@ -28,7 +28,7 @@ class Artifacts
     public function __construct(
         StorageClient $storageClient,
         LoggerInterface $logger,
-        Temp $temp,
+        Temp $temp
     ) {
         $this->storageClient = $storageClient;
         $this->logger = $logger;
