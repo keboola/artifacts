@@ -17,33 +17,22 @@ use Symfony\Component\Process\Exception\ProcessFailedException;
 class Artifacts
 {
     public const DOWNLOAD_FILES_MAX_LIMIT = 50;
+    public const DOWNLOAD_TYPE_RUNS = 'runs';
+    public const DOWNLOAD_TYPE_SHARED = 'shared';
+    public const DOWNLOAD_TYPE_CUSTOM = 'custom';
+
     private StorageClient $storageClient;
     private Filesystem $filesystem;
     private LoggerInterface $logger;
-    private string $branchId;
-    private string $componentId;
-    private ?string $configId;
-    private string $jobId;
-    private ?string $orchestrationId;
 
     public function __construct(
         StorageClient $storageClient,
         LoggerInterface $logger,
-        Temp $temp,
-        string $branchId,
-        string $componentId,
-        ?string $configId,
-        string $jobId,
-        ?string $orchestrationId = null
+        Temp $temp
     ) {
         $this->storageClient = $storageClient;
         $this->logger = $logger;
         $this->filesystem = new Filesystem($temp);
-        $this->branchId = $branchId;
-        $this->componentId = $componentId;
-        $this->configId = $configId;
-        $this->jobId = $jobId;
-        $this->orchestrationId = $orchestrationId;
     }
 
     public function getFilesystem(): Filesystem
@@ -51,65 +40,73 @@ class Artifacts
         return $this->filesystem;
     }
 
-    public function upload(): array
+    public function upload(Tags $tags): array
     {
-        if (!$this->checkConfigId()) {
+        if (!$this->checkConfigId($tags)) {
             return [];
         }
 
         $uploaded = [];
-        $uploaded[] = $this->uploadArtifact($this->filesystem->getUploadCurrentDir());
+        $uploaded[] = $this->uploadArtifact(
+            $this->filesystem->getUploadCurrentDir(),
+            $tags
+        );
 
-        if ($this->orchestrationId) {
-            $uploaded[] = $this->uploadArtifact($this->filesystem->getUploadSharedDir(), [
-                'shared',
-                sprintf('orchestrationId-%s', $this->orchestrationId),
-            ]);
+        if ($tags->getOrchestrationId()) {
+            $uploaded[] = $this->uploadArtifact(
+                $this->filesystem->getUploadSharedDir(),
+                $tags->setIsShared(true)
+            );
         }
 
         return array_filter($uploaded);
     }
 
-    public function download(array $configuration): array
+    public function download(Tags $tags, array $configuration): array
     {
-        if (!$this->checkConfigId()) {
+        if (!$this->checkConfigId($tags)) {
             return [];
         }
 
         if (!empty($configuration['artifacts']['runs']['enabled'])) {
-            $artifactsConfiguration = $configuration['artifacts'];
+            $artifactsRunsConfiguration = $configuration['artifacts']['runs'];
             return $this->downloadRuns(
-                $artifactsConfiguration['runs']['filter']['limit'] ?? null,
-                $artifactsConfiguration['runs']['filter']['date_since'] ?? null,
+                $tags,
+                $artifactsRunsConfiguration['filter']['limit'] ?? null,
+                $artifactsRunsConfiguration['filter']['date_since'] ?? null,
+            );
+        }
+
+        if (!empty($configuration['artifacts']['custom']['enabled'])) {
+            $artifactsCustomConfiguration = $configuration['artifacts']['custom'];
+            return $this->downloadRuns(
+                Tags::fromConfiguration($configuration),
+                $artifactsCustomConfiguration['filter']['limit'] ?? null,
+                $artifactsCustomConfiguration['filter']['date_since'] ?? null,
+                self::DOWNLOAD_TYPE_CUSTOM
             );
         }
 
         if (!empty($configuration['artifacts']['shared']['enabled'])) {
-            return $this->downloadShared();
+            return $this->downloadShared($tags->setIsShared(true));
         }
 
         return [];
     }
 
     private function downloadRuns(
+        Tags $tags,
         ?int $limit = null,
-        ?string $dateSince = null
+        ?string $dateSince = null,
+        string $type = self::DOWNLOAD_TYPE_RUNS
     ): array {
-        if (is_null($this->configId)) {
+        if (is_null($tags->getConfigId())) {
             $this->logger->warning('Skipping download of artifacts, configuration Id is not set');
             return [];
         }
 
-        $query = sprintf(
-            'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s NOT shared)',
-            $this->branchId,
-            $this->componentId,
-            $this->configId
-        );
-        if ($dateSince) {
-            $dateUTC = (new DateTime($dateSince))->format('Y-m-d');
-            $query .= ' AND created:>' . $dateUTC;
-        }
+        $query = $tags->toDownloadRunsQuery($dateSince);
+
         if ($limit === null || $limit > self::DOWNLOAD_FILES_MAX_LIMIT) {
             $limit = self::DOWNLOAD_FILES_MAX_LIMIT;
         }
@@ -126,7 +123,7 @@ class Artifacts
                 $jobId = StorageFileHelper::getJobIdFromFileTag($file);
                 $tmpPath = $this->filesystem->getTmpDir() . '/' . $file['id'];
                 $this->storageClient->downloadFile($file['id'], $tmpPath);
-                $dstPath = $this->filesystem->getDownloadRunsJobDir($jobId);
+                $dstPath = $this->resolveDownloadPath($jobId, $type);
                 $this->filesystem->extractArchive($tmpPath, $dstPath);
                 $result[] = $this->fileToResult($file['id']);
             } catch (ArtifactsException $e) {
@@ -141,22 +138,23 @@ class Artifacts
         return $result;
     }
 
-    private function downloadShared(): array
+    private function resolveDownloadPath(string $jobId, string $type): string
     {
-        if (!$this->orchestrationId) {
+        if ($type === self::DOWNLOAD_TYPE_CUSTOM) {
+            return $this->filesystem->getDownloadCustomJobsDir($jobId);
+        }
+        return $this->filesystem->getDownloadRunsJobDir($jobId);
+    }
+
+    private function downloadShared(Tags $tags): array
+    {
+        if (!$tags->getOrchestrationId()) {
             return [];
         }
 
-        $tagsQuery = sprintf(
-            'artifact AND shared AND branchId-%s AND orchestrationId-%s',
-            $this->branchId,
-            $this->orchestrationId
-        );
-        $query = sprintf('tags:(%s)', $tagsQuery);
-
         $files = $this->storageClient->listFiles(
             (new ListFilesOptions())
-                ->setQuery($query)
+                ->setQuery($tags->toDownloadSharedQuery())
         );
 
         $result = [];
@@ -177,7 +175,7 @@ class Artifacts
         return $result;
     }
 
-    private function uploadArtifact(string $directory, array $addTags = []): ?array
+    private function uploadArtifact(string $directory, Tags $tags): ?array
     {
         $finder = new Finder();
         $count = $finder->in($directory)->count();
@@ -189,16 +187,14 @@ class Artifacts
             $this->filesystem->archiveDir($directory, $this->filesystem->getArchivePath());
 
             $options = new FileUploadOptions();
-            $options->setTags(array_merge([
-                'artifact',
-                'branchId-' . $this->branchId,
-                'componentId-' . $this->componentId,
-                'configId-' . $this->configId,
-                'jobId-' . $this->jobId,
-            ], $addTags));
+            $options->setTags($tags->toUploadArray());
 
             $fileId = $this->storageClient->uploadFile($this->filesystem->getArchivePath(), $options);
-            $this->logger->info(sprintf('Uploaded artifact for job "%s" to file "%s"', $this->jobId, $fileId));
+            $this->logger->info(sprintf(
+                'Uploaded artifact for job "%s" to file "%s"',
+                $tags->getJobId(),
+                $fileId
+            ));
             return $this->fileToResult($fileId);
         } catch (ProcessFailedException | ClientException $e) {
             throw new ArtifactsException(sprintf('Error uploading file: %s', $e->getMessage()), 0, $e);
@@ -214,9 +210,9 @@ class Artifacts
         return $this->fileToResult($file['id']);
     }
 
-    private function checkConfigId(): bool
+    private function checkConfigId(Tags $tags): bool
     {
-        if (is_null($this->configId)) {
+        if (is_null($tags->getConfigId())) {
             $this->logger->warning('Ignoring artifacts, configuration Id is not set');
             return false;
         }
