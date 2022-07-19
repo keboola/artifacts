@@ -55,7 +55,7 @@ class Artifacts
         if ($tags->getOrchestrationId()) {
             $uploaded[] = $this->uploadArtifact(
                 $this->filesystem->getUploadSharedDir(),
-                $tags
+                $tags->setIsShared(true)
             );
         }
 
@@ -88,7 +88,7 @@ class Artifacts
         }
 
         if (!empty($configuration['artifacts']['shared']['enabled'])) {
-            return $this->downloadShared($tags);
+            return $this->downloadShared($tags->setIsShared(true));
         }
 
         return [];
@@ -98,23 +98,15 @@ class Artifacts
         Tags $tags,
         ?int $limit = null,
         ?string $dateSince = null,
-        string $type = 'runs'
+        string $type = self::DOWNLOAD_TYPE_RUNS
     ): array {
         if (is_null($tags->getConfigId())) {
             $this->logger->warning('Skipping download of artifacts, configuration Id is not set');
             return [];
         }
 
-        $query = sprintf(
-            'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s NOT shared)',
-            $tags->getBranchId(),
-            $tags->getComponentId(),
-            $tags->getConfigId()
-        );
-        if ($dateSince) {
-            $dateUTC = (new DateTime($dateSince))->format('Y-m-d');
-            $query .= ' AND created:>' . $dateUTC;
-        }
+        $query = $tags->toDownloadRunsQuery($dateSince);
+
         if ($limit === null || $limit > self::DOWNLOAD_FILES_MAX_LIMIT) {
             $limit = self::DOWNLOAD_FILES_MAX_LIMIT;
         }
@@ -160,16 +152,9 @@ class Artifacts
             return [];
         }
 
-        $tagsQuery = sprintf(
-            'artifact AND shared AND branchId-%s AND orchestrationId-%s',
-            $tags->getBranchId(),
-            $tags->getOrchestrationId()
-        );
-        $query = sprintf('tags:(%s)', $tagsQuery);
-
         $files = $this->storageClient->listFiles(
             (new ListFilesOptions())
-                ->setQuery($query)
+                ->setQuery($tags->toDownloadSharedQuery())
         );
 
         $result = [];
@@ -202,7 +187,7 @@ class Artifacts
             $this->filesystem->archiveDir($directory, $this->filesystem->getArchivePath());
 
             $options = new FileUploadOptions();
-            $options->setTags($tags->toArray());
+            $options->setTags($tags->toUploadArray());
 
             $fileId = $this->storageClient->uploadFile($this->filesystem->getArchivePath(), $options);
             $this->logger->info(sprintf(
