@@ -35,8 +35,8 @@ class ArtifactsTest extends TestCase
         $temp = new Temp();
 
         $artifacts = new Artifacts(
-            self::createMock(StorageClient::class),
-            self::createMock(Logger::class),
+            $this->createMock(StorageClient::class),
+            $this->createMock(Logger::class),
             $temp
         );
 
@@ -131,7 +131,7 @@ class ArtifactsTest extends TestCase
     public function uploadExceptionsHandlingData(): iterable
     {
         yield 'ProcessFailedException convert' => [
-            new ProcessFailedException(self::createMock(Process::class)),
+            new ProcessFailedException($this->createMock(Process::class)),
             ArtifactsException::class,
             'Error uploading file: The command "" failed.',
         ];
@@ -156,7 +156,7 @@ class ArtifactsTest extends TestCase
         string $expectedException,
         string $expectedExceptionMessage
     ): void {
-        $storageClientMock = self::createMock(StorageClient::class);
+        $storageClientMock = $this->createMock(StorageClient::class);
         $storageClientMock->expects(self::once())
             ->method('uploadFile')
             ->willThrowException($exception)
@@ -167,7 +167,7 @@ class ArtifactsTest extends TestCase
 
         $artifacts = new Artifacts(
             $storageClientMock,
-            self::createMock(Logger::class),
+            $this->createMock(Logger::class),
             $temp
         );
 
@@ -184,7 +184,7 @@ class ArtifactsTest extends TestCase
 
     public function testUploadDoNotUploadIfNoFileExists(): void
     {
-        $storageClientMock = self::createMock(StorageClient::class);
+        $storageClientMock = $this->createMock(StorageClient::class);
         $storageClientMock
             ->expects($this->never())
             ->method($this->anything())
@@ -193,7 +193,7 @@ class ArtifactsTest extends TestCase
         $temp = new Temp();
         $artifacts = new Artifacts(
             $storageClientMock,
-            self::createMock(Logger::class),
+            $this->createMock(Logger::class),
             $temp
         );
 
@@ -207,7 +207,7 @@ class ArtifactsTest extends TestCase
 
     public function testUploadConfigIdNull(): void
     {
-        $storageClientMock = self::createMock(StorageClient::class);
+        $storageClientMock = $this->createMock(StorageClient::class);
         $storageClientMock
             ->expects($this->never())
             ->method($this->anything())
@@ -367,7 +367,7 @@ class ArtifactsTest extends TestCase
 
     public function testDownloadConfigIdNull(): void
     {
-        $storageClientMock = self::createMock(StorageClient::class);
+        $storageClientMock = $this->createMock(StorageClient::class);
         $storageClientMock
             ->expects($this->never())
             ->method($this->anything())
@@ -409,7 +409,7 @@ class ArtifactsTest extends TestCase
             (new DateTime($createdSince))->format('Y-m-d')
         );
 
-        $storageClientMock = self::createMock(StorageClient::class);
+        $storageClientMock = $this->createMock(StorageClient::class);
         $storageClientMock
             ->expects(self::once())
             ->method('listFiles')
@@ -490,7 +490,7 @@ class ArtifactsTest extends TestCase
             '99999'
         );
 
-        $storageClientMock = self::createMock(StorageClient::class);
+        $storageClientMock = $this->createMock(StorageClient::class);
         $storageClientMock
             ->expects(self::once())
             ->method('listFiles')
