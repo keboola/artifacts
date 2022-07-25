@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts;
 
-use DateTime;
 use Keboola\StorageApi\Client as StorageClient;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\FileUploadOptions;
@@ -185,6 +184,7 @@ class Artifacts
 
         try {
             $this->filesystem->archiveDir($directory, $this->filesystem->getArchivePath());
+            $this->filesystem->checkFileSize($this->filesystem->getArchivePath());
 
             $options = new FileUploadOptions();
             $options->setTags($tags->toUploadArray());

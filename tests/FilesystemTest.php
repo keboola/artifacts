@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts\Tests;
 
+use Keboola\Artifacts\ArtifactsException;
+use Keboola\Artifacts\Filesystem;
 use Keboola\Artifacts\Filesystem as ArtifactsFilesystem;
 use Keboola\Temp\Temp;
 use PHPUnit\Framework\TestCase;
@@ -129,5 +131,36 @@ class FilesystemTest extends TestCase
             ],
             $files
         );
+    }
+
+    public function testGetFileSize(): void
+    {
+        $temp = new Temp();
+        $artifactsFilesystem = new ArtifactsFilesystem($temp);
+
+        self::assertEquals(2**30, $artifactsFilesystem->getFileSizeLimit());
+    }
+
+    public function testCheckFileSize(): void
+    {
+        $temp = new Temp();
+        $filesystemMock = $this->getMockBuilder(Filesystem::class)
+            ->setConstructorArgs([$temp])
+            ->onlyMethods(['getFileSizeLimit'])
+            ->getMock()
+        ;
+        $filesystemMock->method('getFileSizeLimit')->willReturn(5);
+
+        file_put_contents($filesystemMock->getUploadCurrentDir() . '/test-size', 'something');
+
+        $filesystemMock->archiveDir(
+            $filesystemMock->getUploadCurrentDir(),
+            $filesystemMock->getArchivePath()
+        );
+
+        $this->expectException(ArtifactsException::class);
+        $this->expectExceptionMessage('Artifact exceeds maximum allowed size of 5.00 B');
+
+        $filesystemMock->checkFileSize($filesystemMock->getArchivePath());
     }
 }
