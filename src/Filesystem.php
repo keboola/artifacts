@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Keboola\Artifacts;
 
 use Keboola\Temp\Temp;
+use SplFileInfo;
 use Symfony\Component\Filesystem\Filesystem as SymfonyFilesystem;
 use Symfony\Component\Process\Process;
 
@@ -22,6 +23,7 @@ class Filesystem
     private string $downloadCustomDir;
     private string $archivePath;
     private SymfonyFilesystem $filesystem;
+    private int $fileSizeLimit;
 
     public function __construct(Temp $temp)
     {
@@ -42,6 +44,9 @@ class Filesystem
         $this->mkdir($this->artifactsDir);
         $this->mkdir($this->uploadCurrentDir);
         $this->mkdir($this->uploadSharedDir);
+
+        // 1GB limit
+        $this->fileSizeLimit = pow(2, 30);
     }
 
     public function getTmpDir(): string
@@ -104,6 +109,22 @@ class Filesystem
         return $this->archivePath;
     }
 
+    public function getFileSizeLimit(): int
+    {
+        return $this->fileSizeLimit;
+    }
+
+    public function checkFileSize(string $path): void
+    {
+        $archiveFileInfo = new SplFileInfo($path);
+        if ($archiveFileInfo->getSize() > $this->getFileSizeLimit()) {
+            throw new ArtifactsException(sprintf(
+                'Artifact exceeds maximum allowed size of %s',
+                $this->humanReadableSize($this->getFileSizeLimit())
+            ));
+        }
+    }
+
     public function archiveDir(string $sourcePath, string $targetPath): void
     {
         $process = new Process([
@@ -135,5 +156,13 @@ class Filesystem
         if (!$this->filesystem->exists($path)) {
             $this->filesystem->mkdir($path);
         }
+    }
+
+    private function humanReadableSize(int $bytes): string
+    {
+        $size   = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+        $factor = floor((strlen((string) $bytes) - 1) / 3);
+
+        return sprintf('%.2f %s', $bytes / (1024 ** $factor), $size[$factor]);
     }
 }

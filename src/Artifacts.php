@@ -184,6 +184,7 @@ class Artifacts
 
         try {
             $this->filesystem->archiveDir($directory, $this->filesystem->getArchivePath());
+            $this->filesystem->checkFileSize($this->filesystem->getArchivePath());
 
             $options = new FileUploadOptions();
             $options->setTags($tags->toUploadArray());
