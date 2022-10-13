@@ -48,25 +48,18 @@ class Artifacts
             return [];
         }
 
-        $current = [];
-        array_push(
-            $current,
-            ...$this->uploadArtifacts(
-                $this->filesystem->getUploadCurrentDir(),
-                $tags,
-                $configuration
-            )
+        $current = $this->uploadArtifacts(
+            $this->filesystem->getUploadCurrentDir(),
+            $tags,
+            $configuration
         );
 
         $shared = [];
         if ($tags->getOrchestrationId()) {
-            array_push(
-                $shared,
-                ...$this->uploadArtifacts(
-                    $this->filesystem->getUploadSharedDir(),
-                    $tags->setIsShared(true),
-                    $configuration
-                )
+            $shared = $this->uploadArtifacts(
+                $this->filesystem->getUploadSharedDir(),
+                $tags->setIsShared(true),
+                $configuration
             );
         }
 
