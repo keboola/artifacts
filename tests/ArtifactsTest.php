@@ -472,9 +472,9 @@ class ArtifactsTest extends TestCase
                 ],
             ],
             'expectedFiles' => [
+                'file1' => '{"foo":"bar"}',
                 'file2' => '{"foo":"baz"}',
                 'file3' => '{"baz":"bar"}',
-                'file1' => '{"foo":"bar"}',
             ],
         ];
 
@@ -518,9 +518,9 @@ class ArtifactsTest extends TestCase
                 ],
             ],
             'expectedFiles' => [
+                'file1' => '{"foo":"bar"}',
                 'file2' => '{"foo":"baz"}',
                 'file3' => '{"baz":"bar"}',
-                'file1' => '{"foo":"bar"}',
             ],
         ];
 
@@ -543,10 +543,6 @@ class ArtifactsTest extends TestCase
                 ],
             ],
             'expectedFiles' => [
-                'file2' => '{"foo":"baz"}',
-                'file3' => '{"baz":"bar"}',
-            ],
-            'expectedContent' => [
                 'file2' => '{"foo":"baz"}',
                 'file3' => '{"baz":"bar"}',
             ],
@@ -885,6 +881,7 @@ class ArtifactsTest extends TestCase
             ->files()
             ->in($expectedDownloadDir)
             ->depth(1)
+            ->sortByName()
         ;
 
         foreach ($finder as $file) {
@@ -898,6 +895,7 @@ class ArtifactsTest extends TestCase
             ->files()
             ->in($expectedDownloadDir)
             ->depth(2)
+            ->sortByName()
         ;
 
         $files = iterator_to_array($finder);
@@ -922,10 +920,10 @@ class ArtifactsTest extends TestCase
             ->files()
             ->in($expectedDownloadDir)
             ->depth(1)
+            ->sortByName()
         ;
 
         $files = iterator_to_array($finder);
-
         foreach ($expectedFiles as $expectedFile => $expectedContent) {
             $file = array_shift($files);
             self::assertNotNull($file);
