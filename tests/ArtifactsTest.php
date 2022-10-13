@@ -902,10 +902,12 @@ class ArtifactsTest extends TestCase
 
         $files = iterator_to_array($finder);
         $file = array_shift($files);
+        self::assertNotNull($file);
         self::assertEquals('file2', $file->getFilename());
         self::assertEquals('{"foo":"baz"}', $file->getContents());
 
         $file = array_shift($files);
+        self::assertNotNull($file);
         self::assertEquals('file3', $file->getFilename());
         self::assertEquals('{"baz":"bar"}', $file->getContents());
     }
@@ -926,6 +928,7 @@ class ArtifactsTest extends TestCase
 
         foreach ($expectedFiles as $expectedFile => $expectedContent) {
             $file = array_shift($files);
+            self::assertNotNull($file);
             self::assertEquals($expectedFile, $file->getFilename());
             self::assertEquals($expectedContent, $file->getContents());
         }
