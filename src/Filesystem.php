@@ -151,7 +151,7 @@ class Filesystem
         $process->mustRun();
     }
 
-    private function mkdir(string $path): void
+    public function mkdir(string $path): void
     {
         if (!$this->filesystem->exists($path)) {
             $this->filesystem->mkdir($path);

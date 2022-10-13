@@ -47,8 +47,13 @@ class ArtifactsTest extends TestCase
     }
 
     /** @dataProvider uploadProvider */
-    public function testUpload(?string $orchestrationId, int $uploadedFilesCount, int $expectedSharedCount): void
-    {
+    public function testUpload(
+        ?string $orchestrationId,
+        array $configuration,
+        int $expectedCurrentCount,
+        int $expectedSharedCount,
+        bool $zip = true
+    ): void {
         $temp = new Temp();
         $filesystem = new Filesystem($temp);
         $jobId = (string) rand(0, 999999);
@@ -63,17 +68,19 @@ class ArtifactsTest extends TestCase
             new NullLogger(),
             $temp
         );
-        $uploadedFiles = $artifacts->upload(new Tags(
-            'branch-123',
-            'keboola.component',
-            '123',
-            $jobId,
-            $orchestrationId
-        ));
+        $uploadedFiles = $artifacts->upload(
+            new Tags(
+                'branch-123',
+                'keboola.component',
+                '123',
+                $jobId,
+                $orchestrationId
+            ),
+            $configuration
+        );
 
-        self::assertCount($uploadedFilesCount, $uploadedFiles);
-        $uploadedFileCurrent = array_shift($uploadedFiles);
-        $uploadedFileShared = array_shift($uploadedFiles);
+        self::assertCount($expectedCurrentCount, $uploadedFiles['current']);
+        self::assertCount($expectedSharedCount, $uploadedFiles['shared']);
 
         // wait for file to be available in Storage
         sleep(1);
@@ -83,15 +90,16 @@ class ArtifactsTest extends TestCase
             (new ListFilesOptions())
                 ->setQuery(sprintf('tags:(jobId-%d* NOT shared)', $jobId))
         );
-        self::assertCount(1, $storageFiles);
-        $storageFile = current($storageFiles);
+        self::assertCount($expectedCurrentCount, $storageFiles);
 
+        $storageFile = current($storageFiles);
+        $uploadedFileCurrent = array_pop($uploadedFiles['current']);
         $this->downloadAndAssertStorageFile($filesystem, $storageFile, $uploadedFileCurrent, [
             'artifact',
             'branchId-branch-123',
             'componentId-keboola.component',
             'configId-123',
-        ]);
+        ], $zip);
 
         // shared file
         $storageFiles = $storageClient->listFiles(
@@ -102,6 +110,7 @@ class ArtifactsTest extends TestCase
 
         if (!empty($storageFiles)) {
             $storageFile = current($storageFiles);
+            $uploadedFileShared = array_shift($uploadedFiles['shared']);
             $this->downloadAndAssertStorageFile($filesystem, $storageFile, $uploadedFileShared, [
                 'artifact',
                 'branchId-branch-123',
@@ -117,14 +126,30 @@ class ArtifactsTest extends TestCase
     {
         yield 'orchestrationId set' => [
             'orchestrationId' => (string) rand(0, 999999),
-            'uploadedFilesCount' => 2,
+            'configuration' => [],
+            'currentFilesCount' => 1,
             'sharedFilesCount' => 1,
         ];
 
         yield 'orchestrationId null' => [
             'orchestrationId' => null,
-            'uploadedFilesCount' => 1,
+            'configuration' => [],
+            'currentFilesCount' => 1,
             'sharedFilesCount' => 0,
+        ];
+
+        yield 'no zip' => [
+            'orchestrationId' => null,
+            'configuration' => [
+                'artifacts' => [
+                    'options' => [
+                        'zip' => false,
+                    ],
+                ],
+            ],
+            'currentFilesCount' => 3,
+            'sharedFilesCount' => 0,
+            'zip' => false,
         ];
     }
 
@@ -197,12 +222,15 @@ class ArtifactsTest extends TestCase
             $temp
         );
 
-        self::assertEmpty($artifacts->upload(new Tags(
+        $result = $artifacts->upload(new Tags(
             'main-branch',
             'keboola.orchestrator',
             '123456',
             '123456789'
-        )));
+        ));
+
+        self::assertEmpty($result['current']);
+        self::assertEmpty($result['shared']);
     }
 
     public function testUploadConfigIdNull(): void
@@ -247,7 +275,9 @@ class ArtifactsTest extends TestCase
             'keboola.component',
             '123',
             null,
-            5
+            5,
+            self::TYPE_CURRENT,
+            $configuration
         );
 
         // another branch, config and component
@@ -256,7 +286,9 @@ class ArtifactsTest extends TestCase
             'keboola.component-2',
             '456',
             null,
-            5
+            5,
+            self::TYPE_CURRENT,
+            $configuration
         );
 
         $logger = new TestLogger();
@@ -281,7 +313,7 @@ class ArtifactsTest extends TestCase
             ? $artifacts->getFilesystem()->getDownloadRunsDir()
             : $artifacts->getFilesystem()->getDownloadCustomDir();
 
-        $this->assertFilesAndContent($downloadDir, $expectedCount);
+        $this->assertFilesAndContent($downloadDir);
     }
 
     public function downloadRunsProvider(): Generator
@@ -362,6 +394,162 @@ class ArtifactsTest extends TestCase
                 ],
             ],
             'expectedCount' => 2,
+        ];
+    }
+
+    /** @dataProvider downloadRunsProviderNoZip */
+    public function testDownloadRunsNoZip(
+        string $branchId,
+        string $componentId,
+        string $configId,
+        array $configuration,
+        array $expectedFiles
+    ): void {
+        $configuration['artifacts']['options']['zip'] = false;
+
+        // generate artifacts for a few jobs
+        $this->generateAndUploadArtifacts(
+            'branch-123',
+            'keboola.component',
+            '123',
+            null,
+            5,
+            self::TYPE_CURRENT,
+            $configuration
+        );
+
+        // another branch, config and component
+        $this->generateAndUploadArtifacts(
+            'default',
+            'keboola.component-2',
+            '456',
+            null,
+            5,
+            self::TYPE_CURRENT,
+            $configuration
+        );
+
+        $logger = new TestLogger();
+        $temp = new Temp();
+        $artifacts = new Artifacts(
+            $this->getStorageClient(),
+            $logger,
+            $temp
+        );
+
+        $result = $artifacts->download(new Tags(
+            $branchId,
+            $componentId,
+            $configId,
+            (string) rand(0, 999999)
+        ), $configuration);
+
+        self::assertCount(count($expectedFiles), $result);
+        self::assertArrayHasKey('storageFileId', $result[0]);
+
+        $downloadDir = empty($configuration['artifacts']['custom']['enabled'])
+            ? $artifacts->getFilesystem()->getDownloadRunsDir()
+            : $artifacts->getFilesystem()->getDownloadCustomDir();
+
+        $this->assertFilesAndContentNoZip($downloadDir, $expectedFiles);
+    }
+
+    public function downloadRunsProviderNoZip(): Generator
+    {
+        yield 'runs' => [
+            'branch' => 'branch-123',
+            'component' => 'keboola.component',
+            'configId' => '123',
+            'configuration' => [
+                'artifacts' => [
+                    'runs' => [
+                        'enabled' => true,
+                        'filter' => [
+                            'limit' => 3,
+                            'date_since' => '-1 day',
+                        ],
+                    ],
+                ],
+            ],
+            'expectedFiles' => [
+                'file2' => '{"foo":"baz"}',
+                'file3' => '{"baz":"bar"}',
+                'file1' => '{"foo":"bar"}',
+            ],
+        ];
+
+        yield 'runs 2' => [
+            'branch' => 'default',
+            'component' => 'keboola.component-2',
+            'configId' => '456',
+            'configuration' => [
+                'artifacts' => [
+                    'runs' => [
+                        'enabled' => true,
+                        'filter' => [
+                            'limit' => 2,
+                            'date_since' => '-1 day',
+                        ],
+                    ],
+                ],
+            ],
+            'expectedFiles' => [
+                'file2' => '{"foo":"baz"}',
+                'file3' => '{"baz":"bar"}',
+            ],
+        ];
+
+        yield 'custom' => [
+            'branch' => 'branch-3',
+            'component' => 'branch-3',
+            'config' => '789',
+            'configuration' => [
+                'artifacts' => [
+                    'custom' => [
+                        'enabled' => true,
+                        'filter' => [
+                            'branch_id' => 'default',
+                            'component_id' => 'keboola.component-2',
+                            'config_id' => '456',
+                            'limit' => 3,
+                            'date_since' => '-1 day',
+                        ],
+                    ],
+                ],
+            ],
+            'expectedFiles' => [
+                'file2' => '{"foo":"baz"}',
+                'file3' => '{"baz":"bar"}',
+                'file1' => '{"foo":"bar"}',
+            ],
+        ];
+
+        yield 'custom 2' => [
+            'branch' => 'default',
+            'component' => 'keboola.component',
+            'configId' => '999',
+            'configuration' => [
+                'artifacts' => [
+                    'custom' => [
+                        'enabled' => true,
+                        'filter' => [
+                            'branch_id' => 'branch-123',
+                            'component_id' => 'keboola.component',
+                            'config_id' => '123',
+                            'limit' => 2,
+                            'date_since' => '-1 day',
+                        ],
+                    ],
+                ],
+            ],
+            'expectedFiles' => [
+                'file2' => '{"foo":"baz"}',
+                'file3' => '{"baz":"bar"}',
+            ],
+            'expectedContent' => [
+                'file2' => '{"foo":"baz"}',
+                'file3' => '{"baz":"bar"}',
+            ],
         ];
     }
 
@@ -575,7 +763,8 @@ class ArtifactsTest extends TestCase
         string $configId,
         ?string $orchestrationId,
         int $count,
-        string $type = self::TYPE_CURRENT
+        string $type = self::TYPE_CURRENT,
+        array $configuration = []
     ): void {
         $storageClient = $this->getStorageClient();
         for ($i=0; $i<$count; $i++) {
@@ -593,7 +782,7 @@ class ArtifactsTest extends TestCase
                 $configId,
                 (string) rand(0, 999999),
                 $orchestrationId
-            ));
+            ), $configuration);
         }
     }
 
@@ -608,6 +797,7 @@ class ArtifactsTest extends TestCase
 
         $filePath1 = $uploadDir . '/file1';
         $filePath2 = $uploadDir . '/folder/file2';
+        $filePath3 = $uploadDir . '/folder/file3';
         $filesystem = new SymfonyFilesystem();
 
         // create some files
@@ -617,6 +807,10 @@ class ArtifactsTest extends TestCase
 
         $filesystem->dumpFile($filePath2, (string) json_encode([
             'foo' => 'baz',
+        ]));
+
+        $filesystem->dumpFile($filePath3, (string) json_encode([
+            'baz' => 'bar',
         ]));
     }
 
@@ -652,14 +846,15 @@ class ArtifactsTest extends TestCase
         self::assertCount($count, $result);
         self::assertArrayHasKey('storageFileId', $result[0]);
 
-        $this->assertFilesAndContent($artifacts->getFilesystem()->getDownloadSharedDir(), $count);
+        $this->assertFilesAndContent($artifacts->getFilesystem()->getDownloadSharedDir());
     }
 
     private function downloadAndAssertStorageFile(
         Filesystem $filesystem,
         array $storageFile,
         array $uploadedStorageFile,
-        array $tags
+        array $tags,
+        bool $unzip = true
     ): void {
         $storageClient = $this->getStorageClient();
 
@@ -669,9 +864,12 @@ class ArtifactsTest extends TestCase
             self::assertContains($tag, $storageFile['tags']);
         }
 
-        $downloadedArtifactPath = '/tmp/downloaded.tar.gz';
+        $downloadedArtifactPath = $unzip ? '/tmp/downloaded.tar.gz' : '/tmp/' . $storageFile['name'];
         $storageClient->downloadFile($uploadedStorageFile['storageFileId'], $downloadedArtifactPath);
-        $filesystem->extractArchive($downloadedArtifactPath, '/tmp');
+
+        if ($unzip) {
+            $filesystem->extractArchive($downloadedArtifactPath, '/tmp');
+        }
 
         $file1 = file_get_contents('/tmp/file1');
         $file2 = file_get_contents('/tmp/folder/file2');
@@ -679,7 +877,7 @@ class ArtifactsTest extends TestCase
         self::assertSame('{"foo":"baz"}', $file2);
     }
 
-    private function assertFilesAndContent(string $expectedDownloadDir, int $limit): void
+    private function assertFilesAndContent(string $expectedDownloadDir): void
     {
         // level 1
         $finder = new Finder();
@@ -694,8 +892,6 @@ class ArtifactsTest extends TestCase
             self::assertEquals('{"foo":"bar"}', $file->getContents());
         }
 
-        self::assertEquals($limit, $finder->count());
-
         // level 2 (sub folder)
         $finder = new Finder();
         $finder
@@ -704,12 +900,35 @@ class ArtifactsTest extends TestCase
             ->depth(2)
         ;
 
-        foreach ($finder as $file) {
-            self::assertEquals('file2', $file->getFilename());
-            self::assertEquals('{"foo":"baz"}', $file->getContents());
-        }
+        $files = iterator_to_array($finder);
+        $file = array_shift($files);
+        self::assertEquals('file2', $file->getFilename());
+        self::assertEquals('{"foo":"baz"}', $file->getContents());
 
-        self::assertEquals($limit, $finder->count());
+        $file = array_shift($files);
+        self::assertEquals('file3', $file->getFilename());
+        self::assertEquals('{"baz":"bar"}', $file->getContents());
+    }
+
+    private function assertFilesAndContentNoZip(
+        string $expectedDownloadDir,
+        array $expectedFiles
+    ): void {
+        // level 1
+        $finder = new Finder();
+        $finder
+            ->files()
+            ->in($expectedDownloadDir)
+            ->depth(1)
+        ;
+
+        $files = iterator_to_array($finder);
+
+        foreach ($expectedFiles as $expectedFile => $expectedContent) {
+            $file = array_shift($files);
+            self::assertEquals($expectedFile, $file->getFilename());
+            self::assertEquals($expectedContent, $file->getContents());
+        }
     }
 
     private function getStorageClient(): StorageClient
