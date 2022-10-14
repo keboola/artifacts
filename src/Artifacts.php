@@ -10,6 +10,7 @@ use Keboola\StorageApi\Options\FileUploadOptions;
 use Keboola\StorageApi\Options\ListFilesOptions;
 use Keboola\Temp\Temp;
 use Psr\Log\LoggerInterface;
+use SplFileInfo;
 use Symfony\Component\Finder\Finder;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 
@@ -23,6 +24,8 @@ class Artifacts
     private StorageClient $storageClient;
     private Filesystem $filesystem;
     private LoggerInterface $logger;
+
+    public const ZIP_DEFAULT = true;
 
     public function __construct(
         StorageClient $storageClient,
@@ -39,26 +42,31 @@ class Artifacts
         return $this->filesystem;
     }
 
-    public function upload(Tags $tags): array
+    public function upload(Tags $tags, array $configuration = []): array
     {
         if (!$this->checkConfigId($tags)) {
             return [];
         }
 
-        $uploaded = [];
-        $uploaded[] = $this->uploadArtifact(
+        $current = $this->uploadArtifacts(
             $this->filesystem->getUploadCurrentDir(),
-            $tags
+            $tags,
+            $configuration
         );
 
+        $shared = [];
         if ($tags->getOrchestrationId()) {
-            $uploaded[] = $this->uploadArtifact(
+            $shared = $this->uploadArtifacts(
                 $this->filesystem->getUploadSharedDir(),
-                $tags->setIsShared(true)
+                $tags->setIsShared(true),
+                $configuration
             );
         }
 
-        return array_filter($uploaded);
+        return [
+            'current' => $current,
+            'shared' => $shared,
+        ];
     }
 
     public function download(Tags $tags, array $configuration): array
@@ -67,12 +75,15 @@ class Artifacts
             return [];
         }
 
+        $isArchive = $configuration['artifacts']['options']['zip'] ?? self::ZIP_DEFAULT;
         if (!empty($configuration['artifacts']['runs']['enabled'])) {
             $artifactsRunsConfiguration = $configuration['artifacts']['runs'];
             return $this->downloadRuns(
                 $tags,
                 $artifactsRunsConfiguration['filter']['limit'] ?? null,
                 $artifactsRunsConfiguration['filter']['date_since'] ?? null,
+                self::DOWNLOAD_TYPE_RUNS,
+                $isArchive,
             );
         }
 
@@ -82,12 +93,13 @@ class Artifacts
                 Tags::fromConfiguration($configuration),
                 $artifactsCustomConfiguration['filter']['limit'] ?? null,
                 $artifactsCustomConfiguration['filter']['date_since'] ?? null,
-                self::DOWNLOAD_TYPE_CUSTOM
+                self::DOWNLOAD_TYPE_CUSTOM,
+                $isArchive
             );
         }
 
         if (!empty($configuration['artifacts']['shared']['enabled'])) {
-            return $this->downloadShared($tags->setIsShared(true));
+            return $this->downloadShared($tags->setIsShared(true), $isArchive);
         }
 
         return [];
@@ -95,9 +107,10 @@ class Artifacts
 
     private function downloadRuns(
         Tags $tags,
-        ?int $limit = null,
-        ?string $dateSince = null,
-        string $type = self::DOWNLOAD_TYPE_RUNS
+        ?int $limit,
+        ?string $dateSince,
+        string $type,
+        bool $isArchive
     ): array {
         if (is_null($tags->getConfigId())) {
             $this->logger->warning('Skipping download of artifacts, configuration Id is not set');
@@ -120,11 +133,8 @@ class Artifacts
         foreach ($files as $file) {
             try {
                 $jobId = StorageFileHelper::getJobIdFromFileTag($file);
-                $tmpPath = $this->filesystem->getTmpDir() . '/' . $file['id'];
-                $this->storageClient->downloadFile($file['id'], $tmpPath);
                 $dstPath = $this->resolveDownloadPath($jobId, $type);
-                $this->filesystem->extractArchive($tmpPath, $dstPath);
-                $result[] = $this->fileToResult($file['id']);
+                $result[] = $this->downloadFile($file, $dstPath, $isArchive);
             } catch (ArtifactsException $e) {
                 $this->logger->warning(sprintf(
                     'Error downloading run artifact file id "%s": %s',
@@ -145,7 +155,7 @@ class Artifacts
         return $this->filesystem->getDownloadRunsJobDir($jobId);
     }
 
-    private function downloadShared(Tags $tags): array
+    private function downloadShared(Tags $tags, bool $isArchive): array
     {
         if (!$tags->getOrchestrationId()) {
             return [];
@@ -161,7 +171,7 @@ class Artifacts
             try {
                 $jobId = StorageFileHelper::getJobIdFromFileTag($file);
                 $dstPath = $this->filesystem->getDownloadSharedJobsDir($jobId);
-                $result[] = $this->downloadArtifact($file, $dstPath);
+                $result[] = $this->downloadFile($file, $dstPath, $isArchive);
             } catch (ArtifactsException $e) {
                 $this->logger->warning(sprintf(
                     'Error downloading artifact file id "%s": %s',
@@ -174,38 +184,55 @@ class Artifacts
         return $result;
     }
 
-    private function uploadArtifact(string $directory, Tags $tags): ?array
+    private function uploadArtifacts(string $directory, Tags $tags, array $configuration): array
     {
         $finder = new Finder();
         $count = $finder->in($directory)->count();
         if ($count === 0) {
-            return null;
+            return [];
         }
 
         try {
-            $this->filesystem->archiveDir($directory, $this->filesystem->getArchivePath());
-            $this->filesystem->checkFileSize($this->filesystem->getArchivePath());
+            $results = [];
+            if ($configuration['artifacts']['options']['zip'] ?? self::ZIP_DEFAULT) {
+                $this->filesystem->archiveDir($directory, $this->filesystem->getArchivePath());
+                $this->filesystem->checkFileSize($this->filesystem->getArchivePath());
+                $files[] = new SplFileInfo($this->filesystem->getArchivePath());
+            } else {
+                $finder = new Finder();
+                $files = $finder
+                    ->files()
+                    ->in($directory);
+            }
 
-            $options = new FileUploadOptions();
-            $options->setTags($tags->toUploadArray());
+            foreach ($files as $file) {
+                $fileUploadOptions = new FileUploadOptions();
+                $fileUploadOptions->setTags($tags->toUploadArray());
 
-            $fileId = $this->storageClient->uploadFile($this->filesystem->getArchivePath(), $options);
-            $this->logger->info(sprintf(
-                'Uploaded artifact for job "%s" to file "%s"',
-                $tags->getJobId(),
-                $fileId
-            ));
-            return $this->fileToResult($fileId);
+                $fileId = $this->storageClient->uploadFile($file->getPathname(), $fileUploadOptions);
+                $this->logger->info(sprintf(
+                    'Uploaded artifact for job "%s" to file "%s"',
+                    $tags->getJobId(),
+                    $fileId
+                ));
+                $results[] = $this->fileToResult($fileId);
+            }
+            return $results;
         } catch (ProcessFailedException | ClientException $e) {
             throw new ArtifactsException(sprintf('Error uploading file: %s', $e->getMessage()), 0, $e);
         }
     }
 
-    private function downloadArtifact(array $file, string $dstPath): array
+    private function downloadFile(array $file, string $dstDir, bool $isArchive): array
     {
-        $tmpPath = $this->filesystem->getTmpDir() . '/' . $file['id'];
-        $this->storageClient->downloadFile($file['id'], $tmpPath);
-        $this->filesystem->extractArchive($tmpPath, $dstPath);
+        if ($isArchive) {
+            $tmpPath = $this->filesystem->getTmpDir() . '/' . $file['id'];
+            $this->storageClient->downloadFile($file['id'], $tmpPath);
+            $this->filesystem->extractArchive($tmpPath, $dstDir);
+        } else {
+            $this->filesystem->mkdir($dstDir);
+            $this->storageClient->downloadFile($file['id'], sprintf('%s/%s', $dstDir, $file['name']));
+        }
 
         return $this->fileToResult($file['id']);
     }
