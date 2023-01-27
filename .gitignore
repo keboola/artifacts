@@ -4,3 +4,4 @@ vendor
 .env
 .phpunit.result.cache
 .idea/
+/.env.local
