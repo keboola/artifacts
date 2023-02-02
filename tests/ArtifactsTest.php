@@ -429,6 +429,7 @@ class ArtifactsTest extends TestCase
             $configuration
         );
 
+        sleep(2);
         $logger = new TestLogger();
         $temp = new Temp();
         $artifacts = new Artifacts(

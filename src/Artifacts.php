@@ -202,7 +202,8 @@ class Artifacts
                 $finder = new Finder();
                 $files = $finder
                     ->files()
-                    ->in($directory);
+                    ->in($directory)
+                    ->sortByName();
             }
 
             foreach ($files as $file) {
