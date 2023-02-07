@@ -9,6 +9,7 @@ use Generator;
 use Keboola\Artifacts\Artifacts;
 use Keboola\Artifacts\ArtifactsException;
 use Keboola\Artifacts\Filesystem;
+use Keboola\Artifacts\Result;
 use Keboola\Artifacts\Tags;
 use Keboola\StorageApi\Client as StorageClient;
 use Keboola\StorageApi\ClientException;
@@ -79,8 +80,10 @@ class ArtifactsTest extends TestCase
             $configuration
         );
 
-        self::assertCount($expectedCurrentCount, $uploadedFiles['current']);
-        self::assertCount($expectedSharedCount, $uploadedFiles['shared']);
+        $current = array_filter($uploadedFiles, fn ($item) => !$item->isShared());
+        $shared = array_filter($uploadedFiles, fn ($item) => $item->isShared());
+        self::assertCount($expectedCurrentCount, $current);
+        self::assertCount($expectedSharedCount, $shared);
 
         // wait for file to be available in Storage
         sleep(1);
@@ -93,7 +96,8 @@ class ArtifactsTest extends TestCase
         self::assertCount($expectedCurrentCount, $storageFiles);
 
         $storageFile = current($storageFiles);
-        $uploadedFileCurrent = array_pop($uploadedFiles['current']);
+        $uploadedFileCurrent = array_pop($current);
+        self::assertNotNull($uploadedFileCurrent);
         $this->downloadAndAssertStorageFile($filesystem, $storageFile, $uploadedFileCurrent, [
             'artifact',
             'branchId-branch-123',
@@ -110,7 +114,8 @@ class ArtifactsTest extends TestCase
 
         if (!empty($storageFiles)) {
             $storageFile = current($storageFiles);
-            $uploadedFileShared = array_shift($uploadedFiles['shared']);
+            $uploadedFileShared = array_shift($shared);
+            self::assertNotNull($uploadedFileShared);
             $this->downloadAndAssertStorageFile($filesystem, $storageFile, $uploadedFileShared, [
                 'artifact',
                 'branchId-branch-123',
@@ -299,15 +304,14 @@ class ArtifactsTest extends TestCase
             $temp
         );
 
-        $result = $artifacts->download(new Tags(
+        $results = $artifacts->download(new Tags(
             $branchId,
             $componentId,
             $configId,
             (string) rand(0, 999999)
         ), $configuration);
 
-        self::assertCount($expectedCount, $result);
-        self::assertArrayHasKey('storageFileId', $result[0]);
+        self::assertCount($expectedCount, $results);
 
         $downloadDir = empty($configuration['artifacts']['custom']['enabled'])
             ? $artifacts->getFilesystem()->getDownloadRunsDir()
@@ -446,7 +450,6 @@ class ArtifactsTest extends TestCase
         ), $configuration);
 
         self::assertCount(count($expectedFiles), $result);
-        self::assertArrayHasKey('storageFileId', $result[0]);
 
         $downloadDir = empty($configuration['artifacts']['custom']['enabled'])
             ? $artifacts->getFilesystem()->getDownloadRunsDir()
@@ -823,7 +826,7 @@ class ArtifactsTest extends TestCase
             $logger,
             $temp
         );
-        $result = $artifacts->download(
+        $results = $artifacts->download(
             new Tags(
                 $branchId,
                 'keboola.some-component',
@@ -840,8 +843,7 @@ class ArtifactsTest extends TestCase
             ]
         );
 
-        self::assertCount($count, $result);
-        self::assertArrayHasKey('storageFileId', $result[0]);
+        self::assertCount($count, $results);
 
         $this->assertFilesAndContent($artifacts->getFilesystem()->getDownloadSharedDir());
     }
@@ -849,20 +851,19 @@ class ArtifactsTest extends TestCase
     private function downloadAndAssertStorageFile(
         Filesystem $filesystem,
         array $storageFile,
-        array $uploadedStorageFile,
+        Result $uploadedResult,
         array $tags,
         bool $unzip = true
     ): void {
         $storageClient = $this->getStorageClient();
 
-        self::assertSame(['storageFileId' => $storageFile['id']], $uploadedStorageFile);
-        self::assertSame($uploadedStorageFile['storageFileId'], $storageFile['id']);
+        self::assertSame($storageFile['id'], $uploadedResult->getStorageFileId());
         foreach ($tags as $tag) {
             self::assertContains($tag, $storageFile['tags']);
         }
 
         $downloadedArtifactPath = $unzip ? '/tmp/downloaded.tar.gz' : '/tmp/' . $storageFile['name'];
-        $storageClient->downloadFile($uploadedStorageFile['storageFileId'], $downloadedArtifactPath);
+        $storageClient->downloadFile($uploadedResult->getStorageFileId(), $downloadedArtifactPath);
 
         if ($unzip) {
             $filesystem->extractArchive($downloadedArtifactPath, '/tmp');

@@ -136,7 +136,7 @@ class Artifacts
         return $result;
     }
 
-    #[Pure] private function resolveDownloadPath(string $jobId, string $type): string
+    private function resolveDownloadPath(string $jobId, string $type): string
     {
         if ($type === self::DOWNLOAD_TYPE_CUSTOM) {
             return $this->filesystem->getDownloadCustomJobsDir($jobId);
@@ -207,7 +207,7 @@ class Artifacts
                     $tags->getJobId(),
                     $fileId
                 ));
-                $results[] = new Result($file['id']);
+                $results[] = new Result($fileId, $tags->getIsShared());
             }
             return $results;
         } catch (ProcessFailedException | ClientException $e) {
