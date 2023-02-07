@@ -66,12 +66,12 @@ class Tags
         return $this->isShared;
     }
 
-    public static function fromConfiguration(array $configuration = []): self
+    public static function mergeWithConfiguration(Tags $tags, array $configuration = []): self
     {
-        $artifactsCustomConfiguration = $configuration['artifacts']['custom'];
-        $componentId = $artifactsCustomConfiguration['filter']['component_id'];
-        $configId = $artifactsCustomConfiguration['filter']['config_id'];
-        $branchId = $artifactsCustomConfiguration['filter']['branch_id'] ?? ClientWrapper::BRANCH_DEFAULT;
+        $tagsFromConfiguration = $configuration['artifacts']['runs']['filter'];
+        $componentId = $tagsFromConfiguration['component_id'] ?? $tags->getComponentId();
+        $configId = $tagsFromConfiguration['config_id'] ?? $tags->getConfigId();
+        $branchId = $tagsFromConfiguration['branch_id'] ?? $tags->getBranchId();
 
         return new self(
             $branchId,

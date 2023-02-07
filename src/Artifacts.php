@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts;
 
+use JetBrains\PhpStorm\Pure;
 use Keboola\StorageApi\Client as StorageClient;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\FileUploadOptions;
@@ -42,33 +43,31 @@ class Artifacts
         return $this->filesystem;
     }
 
+    /** @return Result[] */
     public function upload(Tags $tags, array $configuration = []): array
     {
         if (!$this->checkConfigId($tags)) {
             return [];
         }
 
-        $current = $this->uploadArtifacts(
+        $results = $this->uploadArtifacts(
             $this->filesystem->getUploadCurrentDir(),
             $tags,
             $configuration
         );
 
-        $shared = [];
         if ($tags->getOrchestrationId()) {
-            $shared = $this->uploadArtifacts(
+            array_push($results, ...$this->uploadArtifacts(
                 $this->filesystem->getUploadSharedDir(),
                 $tags->setIsShared(true),
                 $configuration
-            );
+            ));
         }
 
-        return [
-            'current' => $current,
-            'shared' => $shared,
-        ];
+        return $results;
     }
 
+    /** @return Result[] */
     public function download(Tags $tags, array $configuration): array
     {
         if (!$this->checkConfigId($tags)) {
@@ -79,22 +78,11 @@ class Artifacts
         if (!empty($configuration['artifacts']['runs']['enabled'])) {
             $artifactsRunsConfiguration = $configuration['artifacts']['runs'];
             return $this->downloadRuns(
-                $tags,
+                Tags::mergeWithConfiguration($tags, $configuration),
                 $artifactsRunsConfiguration['filter']['limit'] ?? null,
                 $artifactsRunsConfiguration['filter']['date_since'] ?? null,
                 self::DOWNLOAD_TYPE_RUNS,
                 $isArchive,
-            );
-        }
-
-        if (!empty($configuration['artifacts']['custom']['enabled'])) {
-            $artifactsCustomConfiguration = $configuration['artifacts']['custom'];
-            return $this->downloadRuns(
-                Tags::fromConfiguration($configuration),
-                $artifactsCustomConfiguration['filter']['limit'] ?? null,
-                $artifactsCustomConfiguration['filter']['date_since'] ?? null,
-                self::DOWNLOAD_TYPE_CUSTOM,
-                $isArchive
             );
         }
 
@@ -105,6 +93,7 @@ class Artifacts
         return [];
     }
 
+    /** @return Result[] */
     private function downloadRuns(
         Tags $tags,
         ?int $limit,
@@ -147,7 +136,7 @@ class Artifacts
         return $result;
     }
 
-    private function resolveDownloadPath(string $jobId, string $type): string
+    #[Pure] private function resolveDownloadPath(string $jobId, string $type): string
     {
         if ($type === self::DOWNLOAD_TYPE_CUSTOM) {
             return $this->filesystem->getDownloadCustomJobsDir($jobId);
@@ -155,6 +144,7 @@ class Artifacts
         return $this->filesystem->getDownloadRunsJobDir($jobId);
     }
 
+    /** @return Result[] */
     private function downloadShared(Tags $tags, bool $isArchive): array
     {
         if (!$tags->getOrchestrationId()) {
@@ -184,6 +174,7 @@ class Artifacts
         return $result;
     }
 
+    /** @return Result[] */
     private function uploadArtifacts(string $directory, Tags $tags, array $configuration): array
     {
         $finder = new Finder();
@@ -216,7 +207,7 @@ class Artifacts
                     $tags->getJobId(),
                     $fileId
                 ));
-                $results[] = $this->fileToResult($fileId);
+                $results[] = new Result($file['id']);
             }
             return $results;
         } catch (ProcessFailedException | ClientException $e) {
@@ -224,7 +215,7 @@ class Artifacts
         }
     }
 
-    private function downloadFile(array $file, string $dstDir, bool $isArchive): array
+    private function downloadFile(array $file, string $dstDir, bool $isArchive): Result
     {
         if ($isArchive) {
             $tmpPath = $this->filesystem->getTmpDir() . '/' . $file['id'];
@@ -235,7 +226,7 @@ class Artifacts
             $this->storageClient->downloadFile($file['id'], sprintf('%s/%s', $dstDir, $file['name']));
         }
 
-        return $this->fileToResult($file['id']);
+        return new Result($file['id']);
     }
 
     private function checkConfigId(Tags $tags): bool
@@ -246,12 +237,5 @@ class Artifacts
         }
 
         return true;
-    }
-
-    private function fileToResult(int $fileId): array
-    {
-        return [
-            'storageFileId' => $fileId,
-        ];
     }
 }
