@@ -227,15 +227,14 @@ class ArtifactsTest extends TestCase
             $temp
         );
 
-        $result = $artifacts->upload(new Tags(
+        $results = $artifacts->upload(new Tags(
             'main-branch',
             'keboola.orchestrator',
             '123456',
             '123456789'
         ));
 
-        self::assertEmpty($result['current']);
-        self::assertEmpty($result['shared']);
+        self::assertEmpty($results);
     }
 
     public function testUploadConfigIdNull(): void
