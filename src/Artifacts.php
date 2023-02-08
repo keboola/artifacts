@@ -75,14 +75,26 @@ class Artifacts
         }
 
         $isArchive = $configuration['artifacts']['options']['zip'] ?? self::ZIP_DEFAULT;
+
         if (!empty($configuration['artifacts']['runs']['enabled'])) {
-            $artifactsRunsConfiguration = $configuration['artifacts']['runs'];
+            $filter = $configuration['artifacts']['runs']['filter'];
             return $this->downloadRuns(
-                Tags::mergeWithConfiguration($tags, $configuration),
-                $artifactsRunsConfiguration['filter']['limit'] ?? null,
-                $artifactsRunsConfiguration['filter']['date_since'] ?? null,
+                Tags::mergeWithConfiguration($tags, $filter),
+                $filter['limit'] ?? null,
+                $filter['date_since'] ?? null,
                 self::DOWNLOAD_TYPE_RUNS,
                 $isArchive,
+            );
+        }
+
+        if (!empty($configuration['artifacts']['custom']['enabled'])) {
+            $filter = $configuration['artifacts']['custom']['filter'];
+            return $this->downloadRuns(
+                Tags::mergeWithConfiguration($tags, $filter),
+                $filter['limit'] ?? null,
+                $filter['date_since'] ?? null,
+                self::DOWNLOAD_TYPE_CUSTOM,
+                $isArchive
             );
         }
 

@@ -267,7 +267,7 @@ class ArtifactsTest extends TestCase
     }
 
     /** @dataProvider downloadRunsProvider */
-    public function testDownloadRuns(
+    public function testDownloadRunsSimple(
         string $branchId,
         string $componentId,
         string $configId,
@@ -295,6 +295,8 @@ class ArtifactsTest extends TestCase
             self::TYPE_CURRENT,
             $configuration
         );
+
+        sleep(1);
 
         $logger = new TestLogger();
         $temp = new Temp();
@@ -417,7 +419,7 @@ class ArtifactsTest extends TestCase
             'keboola.component',
             '123',
             null,
-            5,
+            1,
             self::TYPE_CURRENT,
             $configuration
         );
@@ -428,7 +430,7 @@ class ArtifactsTest extends TestCase
             'keboola.component-2',
             '456',
             null,
-            5,
+            1,
             self::TYPE_CURRENT,
             $configuration
         );
