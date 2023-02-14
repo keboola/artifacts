@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Keboola\Artifacts;
 
 use DateTime;
-use Keboola\StorageApiBranch\ClientWrapper;
 
 class Tags
 {
@@ -66,17 +65,12 @@ class Tags
         return $this->isShared;
     }
 
-    public static function fromConfiguration(array $configuration = []): self
+    public static function mergeWithConfiguration(Tags $tags, array $filter): self
     {
-        $artifactsCustomConfiguration = $configuration['artifacts']['custom'];
-        $componentId = $artifactsCustomConfiguration['filter']['component_id'];
-        $configId = $artifactsCustomConfiguration['filter']['config_id'];
-        $branchId = $artifactsCustomConfiguration['filter']['branch_id'] ?? ClientWrapper::BRANCH_DEFAULT;
-
         return new self(
-            $branchId,
-            $componentId,
-            $configId
+            $filter['branch_id'] ?? $tags->getBranchId(),
+            $filter['component_id'] ?? $tags->getComponentId(),
+            $filter['config_id'] ?? $tags->getConfigId(),
         );
     }
 

@@ -42,33 +42,31 @@ class Artifacts
         return $this->filesystem;
     }
 
+    /** @return Result[] */
     public function upload(Tags $tags, array $configuration = []): array
     {
         if (!$this->checkConfigId($tags)) {
             return [];
         }
 
-        $current = $this->uploadArtifacts(
+        $results = $this->uploadArtifacts(
             $this->filesystem->getUploadCurrentDir(),
             $tags,
             $configuration
         );
 
-        $shared = [];
         if ($tags->getOrchestrationId()) {
-            $shared = $this->uploadArtifacts(
+            array_push($results, ...$this->uploadArtifacts(
                 $this->filesystem->getUploadSharedDir(),
                 $tags->setIsShared(true),
                 $configuration
-            );
+            ));
         }
 
-        return [
-            'current' => $current,
-            'shared' => $shared,
-        ];
+        return $results;
     }
 
+    /** @return Result[] */
     public function download(Tags $tags, array $configuration): array
     {
         if (!$this->checkConfigId($tags)) {
@@ -76,23 +74,24 @@ class Artifacts
         }
 
         $isArchive = $configuration['artifacts']['options']['zip'] ?? self::ZIP_DEFAULT;
+
         if (!empty($configuration['artifacts']['runs']['enabled'])) {
-            $artifactsRunsConfiguration = $configuration['artifacts']['runs'];
+            $filter = $configuration['artifacts']['runs']['filter'];
             return $this->downloadRuns(
-                $tags,
-                $artifactsRunsConfiguration['filter']['limit'] ?? null,
-                $artifactsRunsConfiguration['filter']['date_since'] ?? null,
+                Tags::mergeWithConfiguration($tags, $filter),
+                $filter['limit'] ?? null,
+                $filter['date_since'] ?? null,
                 self::DOWNLOAD_TYPE_RUNS,
                 $isArchive,
             );
         }
 
         if (!empty($configuration['artifacts']['custom']['enabled'])) {
-            $artifactsCustomConfiguration = $configuration['artifacts']['custom'];
+            $filter = $configuration['artifacts']['custom']['filter'];
             return $this->downloadRuns(
-                Tags::fromConfiguration($configuration),
-                $artifactsCustomConfiguration['filter']['limit'] ?? null,
-                $artifactsCustomConfiguration['filter']['date_since'] ?? null,
+                Tags::mergeWithConfiguration($tags, $filter),
+                $filter['limit'] ?? null,
+                $filter['date_since'] ?? null,
                 self::DOWNLOAD_TYPE_CUSTOM,
                 $isArchive
             );
@@ -105,6 +104,7 @@ class Artifacts
         return [];
     }
 
+    /** @return Result[] */
     private function downloadRuns(
         Tags $tags,
         ?int $limit,
@@ -155,6 +155,7 @@ class Artifacts
         return $this->filesystem->getDownloadRunsJobDir($jobId);
     }
 
+    /** @return Result[] */
     private function downloadShared(Tags $tags, bool $isArchive): array
     {
         if (!$tags->getOrchestrationId()) {
@@ -184,6 +185,7 @@ class Artifacts
         return $result;
     }
 
+    /** @return Result[] */
     private function uploadArtifacts(string $directory, Tags $tags, array $configuration): array
     {
         $finder = new Finder();
@@ -216,7 +218,7 @@ class Artifacts
                     $tags->getJobId(),
                     $fileId
                 ));
-                $results[] = $this->fileToResult($fileId);
+                $results[] = new Result($fileId, $tags->getIsShared());
             }
             return $results;
         } catch (ProcessFailedException | ClientException $e) {
@@ -224,7 +226,7 @@ class Artifacts
         }
     }
 
-    private function downloadFile(array $file, string $dstDir, bool $isArchive): array
+    private function downloadFile(array $file, string $dstDir, bool $isArchive): Result
     {
         if ($isArchive) {
             $tmpPath = $this->filesystem->getTmpDir() . '/' . $file['id'];
@@ -235,7 +237,7 @@ class Artifacts
             $this->storageClient->downloadFile($file['id'], sprintf('%s/%s', $dstDir, $file['name']));
         }
 
-        return $this->fileToResult($file['id']);
+        return new Result($file['id']);
     }
 
     private function checkConfigId(Tags $tags): bool
@@ -246,12 +248,5 @@ class Artifacts
         }
 
         return true;
-    }
-
-    private function fileToResult(int $fileId): array
-    {
-        return [
-            'storageFileId' => $fileId,
-        ];
     }
 }
