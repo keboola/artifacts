@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts;
 
-use JetBrains\PhpStorm\Pure;
 use Keboola\StorageApi\Client as StorageClient;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\FileUploadOptions;

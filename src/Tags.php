@@ -67,15 +67,10 @@ class Tags
 
     public static function mergeWithConfiguration(Tags $tags, array $filter): self
     {
-        $tagsFromConfiguration = $filter;
-        $componentId = $tagsFromConfiguration['component_id'] ?? $tags->getComponentId();
-        $configId = $tagsFromConfiguration['config_id'] ?? $tags->getConfigId();
-        $branchId = $tagsFromConfiguration['branch_id'] ?? $tags->getBranchId();
-
         return new self(
-            $branchId,
-            $componentId,
-            $configId
+            $filter['component_id'] ?? $tags->getComponentId(),
+            $filter['config_id'] ?? $tags->getConfigId(),
+            $filter['branch_id'] ?? $tags->getBranchId(),
         );
     }
 
