@@ -18,6 +18,7 @@ use Keboola\StorageApiBranch\ClientWrapper;
 use Keboola\StorageApiBranch\Factory\ClientOptions;
 use Keboola\Temp\Temp;
 use Monolog\Logger;
+use PHPUnit\Framework\MockObject\Generator\Generator as MockGenerator;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Psr\Log\Test\TestLogger;
@@ -137,7 +138,7 @@ class ArtifactsTest extends TestCase
         }
     }
 
-    public function uploadProvider(): Generator
+    public static function uploadProvider(): Generator
     {
         yield 'orchestrationId set' => [
             'orchestrationId' => (string) rand(0, 999999),
@@ -168,10 +169,10 @@ class ArtifactsTest extends TestCase
         ];
     }
 
-    public function uploadExceptionsHandlingData(): iterable
+    public static function uploadExceptionsHandlingData(): iterable
     {
         yield 'ProcessFailedException convert' => [
-            new ProcessFailedException($this->createMock(Process::class)),
+            new ProcessFailedException((new MockGenerator)->getMock(Process::class, callOriginalConstructor: false)),
             ArtifactsException::class,
             'Error uploading file: The command "" failed.',
         ];
@@ -180,7 +181,7 @@ class ArtifactsTest extends TestCase
             ArtifactsException::class,
             'Error uploading file: You don\'t have access to the resource.',
         ];
-        yield 'random expection do not convert' => [
+        yield 'random exception do not convert' => [
             new RangeException('Test'),
             RangeException::class,
             'Test',
@@ -337,7 +338,7 @@ class ArtifactsTest extends TestCase
         $this->assertFilesAndContent($downloadDir);
     }
 
-    public function downloadRunsProvider(): Generator
+    public static function downloadRunsProvider(): Generator
     {
         yield 'runs' => [
             'branch' => 'branch-123',
@@ -475,7 +476,7 @@ class ArtifactsTest extends TestCase
         $this->assertFilesAndContentNoZip($downloadDir, $expectedFiles);
     }
 
-    public function downloadRunsProviderNoZip(): Generator
+    public static function downloadRunsProviderNoZip(): Generator
     {
         yield 'runs' => [
             'branch' => 'branch-123',
@@ -653,7 +654,7 @@ class ArtifactsTest extends TestCase
         ), $configuration);
     }
 
-    public function downloadRunsDateSinceProvider(): Generator
+    public static function downloadRunsDateSinceProvider(): Generator
     {
         yield 'basic' => [
             '2022-01-01',
