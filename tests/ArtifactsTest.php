@@ -11,11 +11,14 @@ use Keboola\Artifacts\ArtifactsException;
 use Keboola\Artifacts\Filesystem;
 use Keboola\Artifacts\Result;
 use Keboola\Artifacts\Tags;
-use Keboola\StorageApi\Client as StorageClient;
+use Keboola\StorageApi\Client;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\ListFilesOptions;
+use Keboola\StorageApiBranch\ClientWrapper;
+use Keboola\StorageApiBranch\Factory\ClientOptions;
 use Keboola\Temp\Temp;
 use Monolog\Logger;
+use PHPUnit\Framework\MockObject\Generator\Generator as MockGenerator;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Psr\Log\Test\TestLogger;
@@ -35,8 +38,16 @@ class ArtifactsTest extends TestCase
     {
         $temp = new Temp();
 
+        $storageClientMock = $this->createMock(Client::class);
+        $storageClientMock
+            ->expects($this->never())
+            ->method($this->anything())
+        ;
+        $clientWrapperMock = $this->createMock(ClientWrapper::class);
+        $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
+
         $artifacts = new Artifacts(
-            $this->createMock(StorageClient::class),
+            $clientWrapperMock,
             $this->createMock(Logger::class),
             $temp
         );
@@ -58,14 +69,14 @@ class ArtifactsTest extends TestCase
         $temp = new Temp();
         $filesystem = new Filesystem($temp);
         $jobId = (string) rand(0, 999999);
-        $storageClient = $this->getStorageClient();
+        $storageClientWrapper = $this->getStorageClientWrapper();
 
         // upload the artifacts
         $this->generateArtifacts($temp, self::TYPE_CURRENT);
         $this->generateArtifacts($temp, self::TYPE_SHARED);
 
         $artifacts = new Artifacts(
-            $storageClient,
+            $storageClientWrapper,
             new NullLogger(),
             $temp
         );
@@ -89,7 +100,7 @@ class ArtifactsTest extends TestCase
         sleep(1);
 
         // current file
-        $storageFiles = $storageClient->listFiles(
+        $storageFiles = $storageClientWrapper->getBasicClient()->listFiles(
             (new ListFilesOptions())
                 ->setQuery(sprintf('tags:(jobId-%d* NOT shared)', $jobId))
         );
@@ -106,7 +117,7 @@ class ArtifactsTest extends TestCase
         ], $zip);
 
         // shared file
-        $storageFiles = $storageClient->listFiles(
+        $storageFiles = $storageClientWrapper->getBasicClient()->listFiles(
             (new ListFilesOptions())
                 ->setQuery(sprintf('tags:(jobId-%d* AND orchestrationId-%s)', $jobId, $orchestrationId))
         );
@@ -127,7 +138,7 @@ class ArtifactsTest extends TestCase
         }
     }
 
-    public function uploadProvider(): Generator
+    public static function uploadProvider(): Generator
     {
         yield 'orchestrationId set' => [
             'orchestrationId' => (string) rand(0, 999999),
@@ -158,10 +169,10 @@ class ArtifactsTest extends TestCase
         ];
     }
 
-    public function uploadExceptionsHandlingData(): iterable
+    public static function uploadExceptionsHandlingData(): iterable
     {
         yield 'ProcessFailedException convert' => [
-            new ProcessFailedException($this->createMock(Process::class)),
+            new ProcessFailedException((new MockGenerator)->getMock(Process::class, callOriginalConstructor: false)),
             ArtifactsException::class,
             'Error uploading file: The command "" failed.',
         ];
@@ -170,7 +181,7 @@ class ArtifactsTest extends TestCase
             ArtifactsException::class,
             'Error uploading file: You don\'t have access to the resource.',
         ];
-        yield 'random expection do not convert' => [
+        yield 'random exception do not convert' => [
             new RangeException('Test'),
             RangeException::class,
             'Test',
@@ -186,18 +197,20 @@ class ArtifactsTest extends TestCase
         string $expectedException,
         string $expectedExceptionMessage
     ): void {
-        $storageClientMock = $this->createMock(StorageClient::class);
+        $storageClientMock = $this->createMock(Client::class);
         $storageClientMock->expects(self::once())
             ->method('uploadFile')
-            ->willThrowException($exception)
-        ;
+            ->willThrowException($exception);
+
+        $clientWrapperMock = $this->createMock(ClientWrapper::class);
+        $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
 
         $temp = new Temp();
         $this->generateArtifacts($temp, self::TYPE_CURRENT);
 
         $artifacts = new Artifacts(
-            $storageClientMock,
-            $this->createMock(Logger::class),
+            $clientWrapperMock,
+            new NullLogger(),
             $temp
         );
 
@@ -214,15 +227,17 @@ class ArtifactsTest extends TestCase
 
     public function testUploadDoNotUploadIfNoFileExists(): void
     {
-        $storageClientMock = $this->createMock(StorageClient::class);
+        $storageClientMock = $this->createMock(Client::class);
         $storageClientMock
             ->expects($this->never())
             ->method($this->anything())
         ;
+        $clientWrapperMock = $this->createMock(ClientWrapper::class);
+        $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
 
         $temp = new Temp();
         $artifacts = new Artifacts(
-            $storageClientMock,
+            $clientWrapperMock,
             $this->createMock(Logger::class),
             $temp
         );
@@ -239,17 +254,19 @@ class ArtifactsTest extends TestCase
 
     public function testUploadConfigIdNull(): void
     {
-        $storageClientMock = $this->createMock(StorageClient::class);
+        $storageClientMock = $this->createMock(Client::class);
         $storageClientMock
             ->expects($this->never())
             ->method($this->anything())
         ;
+        $clientWrapperMock = $this->createMock(ClientWrapper::class);
+        $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
 
         $testLogger = new TestLogger();
 
         $temp = new Temp();
         $artifacts = new Artifacts(
-            $storageClientMock,
+            $clientWrapperMock,
             $testLogger,
             $temp
         );
@@ -300,7 +317,7 @@ class ArtifactsTest extends TestCase
         $logger = new TestLogger();
         $temp = new Temp();
         $artifacts = new Artifacts(
-            $this->getStorageClient(),
+            $this->getStorageClientWrapper(),
             $logger,
             $temp
         );
@@ -321,7 +338,7 @@ class ArtifactsTest extends TestCase
         $this->assertFilesAndContent($downloadDir);
     }
 
-    public function downloadRunsProvider(): Generator
+    public static function downloadRunsProvider(): Generator
     {
         yield 'runs' => [
             'branch' => 'branch-123',
@@ -438,7 +455,7 @@ class ArtifactsTest extends TestCase
         $logger = new TestLogger();
         $temp = new Temp();
         $artifacts = new Artifacts(
-            $this->getStorageClient(),
+            $this->getStorageClientWrapper(),
             $logger,
             $temp
         );
@@ -459,7 +476,7 @@ class ArtifactsTest extends TestCase
         $this->assertFilesAndContentNoZip($downloadDir, $expectedFiles);
     }
 
-    public function downloadRunsProviderNoZip(): Generator
+    public static function downloadRunsProviderNoZip(): Generator
     {
         yield 'runs' => [
             'branch' => 'branch-123',
@@ -556,16 +573,18 @@ class ArtifactsTest extends TestCase
 
     public function testDownloadConfigIdNull(): void
     {
-        $storageClientMock = $this->createMock(StorageClient::class);
+        $storageClientMock = $this->createMock(Client::class);
         $storageClientMock
             ->expects($this->never())
             ->method($this->anything())
         ;
+        $clientWrapperMock = $this->createMock(ClientWrapper::class);
+        $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
 
         $testLogger = new TestLogger();
 
         $artifacts = new Artifacts(
-            $storageClientMock,
+            $clientWrapperMock,
             $testLogger,
             new Temp(),
         );
@@ -598,7 +617,7 @@ class ArtifactsTest extends TestCase
             (new DateTime($createdSince))->format('Y-m-d')
         );
 
-        $storageClientMock = $this->createMock(StorageClient::class);
+        $storageClientMock = $this->createMock(Client::class);
         $storageClientMock
             ->expects(self::once())
             ->method('listFiles')
@@ -606,11 +625,13 @@ class ArtifactsTest extends TestCase
                 ->setQuery($expectedQuery)
                 ->setLimit($expectedLimit))
             ->willReturn([]);
+        $clientWrapperMock = $this->createMock(ClientWrapper::class);
+        $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
 
         $logger = new TestLogger();
         $temp = new Temp();
         $artifacts = new Artifacts(
-            $storageClientMock,
+            $clientWrapperMock,
             $logger,
             $temp
         );
@@ -633,7 +654,7 @@ class ArtifactsTest extends TestCase
         ), $configuration);
     }
 
-    public function downloadRunsDateSinceProvider(): Generator
+    public static function downloadRunsDateSinceProvider(): Generator
     {
         yield 'basic' => [
             '2022-01-01',
@@ -679,17 +700,19 @@ class ArtifactsTest extends TestCase
             '99999'
         );
 
-        $storageClientMock = $this->createMock(StorageClient::class);
+        $storageClientMock = $this->createMock(Client::class);
         $storageClientMock
             ->expects(self::once())
             ->method('listFiles')
             ->with((new ListFilesOptions())->setQuery($expectedQuery))
             ->willReturn([]);
+        $clientWrapperMock = $this->createMock(ClientWrapper::class);
+        $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
 
         $logger = new TestLogger();
         $temp = new Temp();
         $artifacts = new Artifacts(
-            $storageClientMock,
+            $clientWrapperMock,
             $logger,
             $temp
         );
@@ -767,7 +790,7 @@ class ArtifactsTest extends TestCase
         string $type = self::TYPE_CURRENT,
         array $configuration = []
     ): void {
-        $storageClient = $this->getStorageClient();
+        $storageClient = $this->getStorageClientWrapper();
         for ($i=0; $i<$count; $i++) {
             $temp = new Temp();
             $this->generateArtifacts($temp, $type);
@@ -823,7 +846,7 @@ class ArtifactsTest extends TestCase
         $logger = new TestLogger();
         $temp = new Temp();
         $artifacts = new Artifacts(
-            $this->getStorageClient(),
+            $this->getStorageClientWrapper(),
             $logger,
             $temp
         );
@@ -856,15 +879,17 @@ class ArtifactsTest extends TestCase
         array $tags,
         bool $unzip = true
     ): void {
-        $storageClient = $this->getStorageClient();
+        $clientWrapper = $this->getStorageClientWrapper();
 
         self::assertSame($storageFile['id'], $uploadedResult->getStorageFileId());
         foreach ($tags as $tag) {
             self::assertContains($tag, $storageFile['tags']);
         }
 
-        $downloadedArtifactPath = $unzip ? '/tmp/downloaded.tar.gz' : '/tmp/' . $storageFile['name'];
-        $storageClient->downloadFile($uploadedResult->getStorageFileId(), $downloadedArtifactPath);
+        $dir = new Temp('artifacts-');
+        $downloadedArtifactPath = $unzip ?
+            $dir->getTmpFolder() . '/downloaded.tar.gz' : $dir->getTmpFolder() . '/' . $storageFile['name'];
+        $clientWrapper->getBasicClient()->downloadFile($uploadedResult->getStorageFileId(), $downloadedArtifactPath);
 
         if ($unzip) {
             $filesystem->extractArchive($downloadedArtifactPath, '/tmp');
@@ -935,11 +960,13 @@ class ArtifactsTest extends TestCase
         }
     }
 
-    private function getStorageClient(): StorageClient
+    private function getStorageClientWrapper(): ClientWrapper
     {
-        return new StorageClient([
-            'url' => (string) getenv('STORAGE_API_URL'),
-            'token' => (string) getenv('STORAGE_API_TOKEN'),
-        ]);
+        return new ClientWrapper(
+            new ClientOptions(
+                url: (string) getenv('STORAGE_API_URL'),
+                token: (string) getenv('STORAGE_API_TOKEN'),
+            ),
+        );
     }
 }

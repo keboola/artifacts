@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts;
 
-use Keboola\StorageApi\Client as StorageClient;
+use Keboola\StorageApi\Client;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\FileUploadOptions;
 use Keboola\StorageApi\Options\ListFilesOptions;
+use Keboola\StorageApiBranch\ClientWrapper;
 use Keboola\Temp\Temp;
 use Psr\Log\LoggerInterface;
 use SplFileInfo;
@@ -21,18 +22,18 @@ class Artifacts
     public const DOWNLOAD_TYPE_SHARED = 'shared';
     public const DOWNLOAD_TYPE_CUSTOM = 'custom';
 
-    private StorageClient $storageClient;
+    private Client $storageClient;
     private Filesystem $filesystem;
     private LoggerInterface $logger;
 
     public const ZIP_DEFAULT = true;
 
     public function __construct(
-        StorageClient $storageClient,
+        ClientWrapper $clientWrapper,
         LoggerInterface $logger,
         Temp $temp
     ) {
-        $this->storageClient = $storageClient;
+        $this->storageClient = $clientWrapper->getBasicClient();
         $this->logger = $logger;
         $this->filesystem = new Filesystem($temp);
     }

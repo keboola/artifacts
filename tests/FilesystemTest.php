@@ -124,13 +124,22 @@ class FilesystemTest extends TestCase
             $files[] = (string) $file;
         }
 
-        self::assertSame(
-            [
-                sprintf('%s/archive-extract-test/test/test2.txt', $temp->getTmpFolder()),
-                sprintf('%s/archive-extract-test/test1.txt', $temp->getTmpFolder()),
-            ],
-            $files
-        );
+        $expectedFiles = [
+            sprintf(
+                '%s/archive-extract-test%stest1.txt',
+                $temp->getTmpFolder(),
+                DIRECTORY_SEPARATOR
+            ),
+            sprintf(
+                '%s/archive-extract-test%stest%stest2.txt',
+                $temp->getTmpFolder(),
+                DIRECTORY_SEPARATOR,
+                DIRECTORY_SEPARATOR
+            ),
+        ];
+        sort($expectedFiles);
+        sort($files);
+        self::assertSame($expectedFiles, $files);
     }
 
     public function testGetFileSize(): void
