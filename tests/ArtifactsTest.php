@@ -878,7 +878,7 @@ class ArtifactsTest extends TestCase
         array $tags,
         bool $unzip = true
     ): void {
-        $storageClient = $this->getStorageClientWrapper();
+        $clientWrapper = $this->getStorageClientWrapper();
 
         self::assertSame($storageFile['id'], $uploadedResult->getStorageFileId());
         foreach ($tags as $tag) {
@@ -888,7 +888,7 @@ class ArtifactsTest extends TestCase
         $dir = new Temp('artifacts-');
         $downloadedArtifactPath = $unzip ?
             $dir->getTmpFolder() . '/downloaded.tar.gz' : $dir->getTmpFolder() . '/' . $storageFile['name'];
-        $storageClient->getBasicClient()->downloadFile($uploadedResult->getStorageFileId(), $downloadedArtifactPath);
+        $clientWrapper->getBasicClient()->downloadFile($uploadedResult->getStorageFileId(), $downloadedArtifactPath);
 
         if ($unzip) {
             $filesystem->extractArchive($downloadedArtifactPath, '/tmp');
