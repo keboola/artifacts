@@ -203,7 +203,7 @@ class ArtifactsTest extends TestCase
             ->willThrowException($exception);
 
         $clientWrapperMock = $this->createMock(ClientWrapper::class);
-        $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
+        $clientWrapperMock->method('getTableAndFileStorageClient')->willReturn($storageClientMock);
 
         $temp = new Temp();
         $this->generateArtifacts($temp, self::TYPE_CURRENT);
@@ -626,7 +626,7 @@ class ArtifactsTest extends TestCase
                 ->setLimit($expectedLimit))
             ->willReturn([]);
         $clientWrapperMock = $this->createMock(ClientWrapper::class);
-        $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
+        $clientWrapperMock->method('getTableAndFileStorageClient')->willReturn($storageClientMock);
 
         $logger = new TestLogger();
         $temp = new Temp();
@@ -707,7 +707,7 @@ class ArtifactsTest extends TestCase
             ->with((new ListFilesOptions())->setQuery($expectedQuery))
             ->willReturn([]);
         $clientWrapperMock = $this->createMock(ClientWrapper::class);
-        $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
+        $clientWrapperMock->method('getTableAndFileStorageClient')->willReturn($storageClientMock);
 
         $logger = new TestLogger();
         $temp = new Temp();
