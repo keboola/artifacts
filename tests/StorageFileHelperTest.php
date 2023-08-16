@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts\Tests;
 
+use Generator;
 use Keboola\Artifacts\ArtifactsException;
 use Keboola\Artifacts\File;
 use Keboola\Artifacts\StorageFileHelper;
@@ -116,7 +117,7 @@ class StorageFileHelperTest extends TestCase
         self::assertEquals($expectedFiles, $files);
     }
 
-    public static function listFilesBranchesProvider()
+    public static function listFilesBranchesProvider(): Generator
     {
         yield 'run on default branch, no files' => [
             'basicFiles' => [],
