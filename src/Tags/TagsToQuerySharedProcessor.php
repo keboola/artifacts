@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts\Tags;
 
-use DateTime;
 use Keboola\Artifacts\Tags;
 
 class TagsToQuerySharedProcessor implements TagsToQueryProcessorInterface
