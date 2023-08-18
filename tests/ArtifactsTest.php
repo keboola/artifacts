@@ -705,7 +705,7 @@ class ArtifactsTest extends TestCase
         $storageClientMock
             ->expects(self::once())
             ->method('listFiles')
-            ->with((new ListFilesOptions())->setQuery($expectedQuery))
+            ->with((new ListFilesOptions())->setQuery($expectedQuery)->setLimit(50))
             ->willReturn([]);
         $clientWrapperMock = $this->createMock(ClientWrapper::class);
         $clientWrapperMock->method('getTableAndFileStorageClient')->willReturn($storageClientMock);

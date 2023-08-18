@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts;
 
+use Keboola\Artifacts\Tags\TagsToQueryRunsProcessor;
+use Keboola\Artifacts\Tags\TagsToQuerySharedProcessor;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\FileUploadOptions;
 use Keboola\StorageApi\Options\ListFilesOptions;
@@ -98,7 +100,12 @@ class Artifacts
         }
 
         if (!empty($configuration['artifacts']['shared']['enabled'])) {
-            return $this->downloadShared($tags->setIsShared(true), $isArchive);
+            $filter = $configuration['artifacts']['custom']['filter'];
+            return $this->downloadShared(
+                $tags->setIsShared(true),
+                $filter['limit'] ?? null,
+                $isArchive,
+            );
         }
 
         return [];
@@ -117,17 +124,15 @@ class Artifacts
             return [];
         }
 
-        $query = $tags->toDownloadRunsQuery($dateSince);
-
         if ($limit === null || $limit > self::DOWNLOAD_FILES_MAX_LIMIT) {
             $limit = self::DOWNLOAD_FILES_MAX_LIMIT;
         }
 
         $files = StorageFileHelper::listFiles(
             $this->clientWrapper,
-            (new ListFilesOptions())
-                ->setQuery($query)
-                ->setLimit($limit)
+            $tags,
+            $limit,
+            new TagsToQueryRunsProcessor($dateSince)
         );
 
         $result = [];
@@ -157,16 +162,21 @@ class Artifacts
     }
 
     /** @return Result[] */
-    private function downloadShared(Tags $tags, bool $isArchive): array
+    private function downloadShared(Tags $tags, ?int $limit, bool $isArchive): array
     {
         if (!$tags->getOrchestrationId()) {
             return [];
         }
 
+        if ($limit === null || $limit > self::DOWNLOAD_FILES_MAX_LIMIT) {
+            $limit = self::DOWNLOAD_FILES_MAX_LIMIT;
+        }
+
         $files = StorageFileHelper::listFiles(
             $this->clientWrapper,
-            (new ListFilesOptions())
-                ->setQuery($tags->toDownloadSharedQuery())
+            $tags,
+            $limit,
+            new TagsToQuerySharedProcessor(),
         );
 
         $result = [];

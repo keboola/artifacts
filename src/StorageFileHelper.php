@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts;
 
+use DateTime;
+use Keboola\Artifacts\Tags\TagsToQueryProcessorInterface;
 use Keboola\StorageApi\Options\ListFilesOptions;
 use Keboola\StorageApiBranch\ClientWrapper;
 
@@ -30,8 +32,12 @@ class StorageFileHelper
         return array_shift($jobIds);
     }
 
-    public static function listFiles(ClientWrapper $clientWrapper, ListFilesOptions $listFilesOptions): array
-    {
+    public static function listFiles(
+        ClientWrapper $clientWrapper,
+        Tags $tags,
+        int $limit,
+        TagsToQueryProcessorInterface $tagsToQueryProcessor
+    ): array {
         /*
         For fake dev/prod mode, we need to use the default branch client, because there are no files in storage
             branches.
@@ -47,11 +53,26 @@ class StorageFileHelper
                     return the same client in this case (practically one is Client and one is BranchAwareClient class,
                     but they work the same in this case))
         */
+        $listFilesOptions = (new ListFilesOptions())
+            ->setQuery($tagsToQueryProcessor->toQuery($tags))
+            ->setLimit($limit);
+
         $sourceBranchId = $clientWrapper->getBranchId();
         $files = $clientWrapper->getTableAndFileStorageClient()->listFiles($listFilesOptions);
         if (!$files && $clientWrapper->isDevelopmentBranch() &&
             $clientWrapper->getClientOptionsReadOnly()->useBranchStorage()
         ) {
+            // change tags to use the default branch
+            $tags = new Tags(
+                $clientWrapper->getDefaultBranch()->id,
+                $tags->getComponentId(),
+                $tags->getConfigId(),
+                $tags->getJobId(),
+                $tags->getOrchestrationId(),
+            );
+            $listFilesOptions = (new ListFilesOptions())
+                ->setQuery($tagsToQueryProcessor->toQuery($tags))
+                ->setLimit($limit);
             $files = $clientWrapper->getClientForDefaultBranch()->listFiles($listFilesOptions);
             if ($files) {
                 // if something was found in the prod branch, then switch reading to the prod branch

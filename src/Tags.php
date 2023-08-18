@@ -90,30 +90,4 @@ class Tags
 
         return $result;
     }
-
-    public function toDownloadSharedQuery(): string
-    {
-        return sprintf(
-            'tags:(artifact AND shared AND branchId-%s AND orchestrationId-%s)',
-            $this->branchId,
-            $this->orchestrationId
-        );
-    }
-
-    public function toDownloadRunsQuery(?string $dateSince): string
-    {
-        $query = sprintf(
-            'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s NOT shared)',
-            $this->branchId,
-            $this->componentId,
-            $this->configId
-        );
-
-        if ($dateSince) {
-            $dateUTC = (new DateTime($dateSince))->format('Y-m-d');
-            $query .= ' AND created:>' . $dateUTC;
-        }
-
-        return $query;
-    }
 }
