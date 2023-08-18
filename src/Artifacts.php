@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts;
 
-use Keboola\StorageApi\Client;
+use Keboola\Artifacts\Tags\TagsToQueryRunsProcessor;
+use Keboola\Artifacts\Tags\TagsToQuerySharedProcessor;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\FileUploadOptions;
 use Keboola\StorageApi\Options\ListFilesOptions;
@@ -22,7 +23,7 @@ class Artifacts
     public const DOWNLOAD_TYPE_SHARED = 'shared';
     public const DOWNLOAD_TYPE_CUSTOM = 'custom';
 
-    private Client $storageClient;
+    private ClientWrapper $clientWrapper;
     private Filesystem $filesystem;
     private LoggerInterface $logger;
 
@@ -33,7 +34,7 @@ class Artifacts
         LoggerInterface $logger,
         Temp $temp
     ) {
-        $this->storageClient = $clientWrapper->getBasicClient();
+        $this->clientWrapper = $clientWrapper;
         $this->logger = $logger;
         $this->filesystem = new Filesystem($temp);
     }
@@ -99,7 +100,12 @@ class Artifacts
         }
 
         if (!empty($configuration['artifacts']['shared']['enabled'])) {
-            return $this->downloadShared($tags->setIsShared(true), $isArchive);
+            $filter = $configuration['artifacts']['custom']['filter'];
+            return $this->downloadShared(
+                $tags->setIsShared(true),
+                $filter['limit'] ?? null,
+                $isArchive,
+            );
         }
 
         return [];
@@ -118,16 +124,15 @@ class Artifacts
             return [];
         }
 
-        $query = $tags->toDownloadRunsQuery($dateSince);
-
         if ($limit === null || $limit > self::DOWNLOAD_FILES_MAX_LIMIT) {
             $limit = self::DOWNLOAD_FILES_MAX_LIMIT;
         }
 
-        $files = $this->storageClient->listFiles(
-            (new ListFilesOptions())
-                ->setQuery($query)
-                ->setLimit($limit)
+        $files = StorageFileHelper::listFiles(
+            $this->clientWrapper,
+            $tags,
+            $limit,
+            new TagsToQueryRunsProcessor($dateSince)
         );
 
         $result = [];
@@ -139,7 +144,7 @@ class Artifacts
             } catch (ArtifactsException $e) {
                 $this->logger->warning(sprintf(
                     'Error downloading run artifact file id "%s": %s',
-                    $file['id'],
+                    $file->id,
                     $e->getMessage()
                 ));
             }
@@ -157,15 +162,21 @@ class Artifacts
     }
 
     /** @return Result[] */
-    private function downloadShared(Tags $tags, bool $isArchive): array
+    private function downloadShared(Tags $tags, ?int $limit, bool $isArchive): array
     {
         if (!$tags->getOrchestrationId()) {
             return [];
         }
 
-        $files = $this->storageClient->listFiles(
-            (new ListFilesOptions())
-                ->setQuery($tags->toDownloadSharedQuery())
+        if ($limit === null || $limit > self::DOWNLOAD_FILES_MAX_LIMIT) {
+            $limit = self::DOWNLOAD_FILES_MAX_LIMIT;
+        }
+
+        $files = StorageFileHelper::listFiles(
+            $this->clientWrapper,
+            $tags,
+            $limit,
+            new TagsToQuerySharedProcessor(),
         );
 
         $result = [];
@@ -177,7 +188,7 @@ class Artifacts
             } catch (ArtifactsException $e) {
                 $this->logger->warning(sprintf(
                     'Error downloading artifact file id "%s": %s',
-                    $file['id'],
+                    $file->id,
                     $e->getMessage()
                 ));
             }
@@ -213,7 +224,10 @@ class Artifacts
                 $fileUploadOptions = new FileUploadOptions();
                 $fileUploadOptions->setTags($tags->toUploadArray());
 
-                $fileId = $this->storageClient->uploadFile($file->getPathname(), $fileUploadOptions);
+                $fileId = $this->clientWrapper->getTableAndFileStorageClient()->uploadFile(
+                    $file->getPathname(),
+                    $fileUploadOptions
+                );
                 $this->logger->info(sprintf(
                     'Uploaded artifact for job "%s" to file "%s"',
                     $tags->getJobId(),
@@ -227,18 +241,21 @@ class Artifacts
         }
     }
 
-    private function downloadFile(array $file, string $dstDir, bool $isArchive): Result
+    private function downloadFile(File $file, string $dstDir, bool $isArchive): Result
     {
         if ($isArchive) {
-            $tmpPath = $this->filesystem->getTmpDir() . '/' . $file['id'];
-            $this->storageClient->downloadFile($file['id'], $tmpPath);
+            $tmpPath = $this->filesystem->getTmpDir() . '/' . $file->id;
+            $this->clientWrapper->getClientForBranch($file->sourceBranchId)->downloadFile($file->id, $tmpPath);
             $this->filesystem->extractArchive($tmpPath, $dstDir);
         } else {
             $this->filesystem->mkdir($dstDir);
-            $this->storageClient->downloadFile($file['id'], sprintf('%s/%s', $dstDir, $file['name']));
+            $this->clientWrapper->getClientForBranch($file->sourceBranchId)->downloadFile(
+                $file->id,
+                sprintf('%s/%s', $dstDir, $file->name)
+            );
         }
 
-        return new Result($file['id']);
+        return new Result((int) $file->id);
     }
 
     private function checkConfigId(Tags $tags): bool

@@ -13,6 +13,7 @@ use Keboola\Artifacts\Result;
 use Keboola\Artifacts\Tags;
 use Keboola\StorageApi\Client;
 use Keboola\StorageApi\ClientException;
+use Keboola\StorageApi\DevBranches;
 use Keboola\StorageApi\Options\ListFilesOptions;
 use Keboola\StorageApiBranch\ClientWrapper;
 use Keboola\StorageApiBranch\Factory\ClientOptions;
@@ -203,7 +204,7 @@ class ArtifactsTest extends TestCase
             ->willThrowException($exception);
 
         $clientWrapperMock = $this->createMock(ClientWrapper::class);
-        $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
+        $clientWrapperMock->method('getTableAndFileStorageClient')->willReturn($storageClientMock);
 
         $temp = new Temp();
         $this->generateArtifacts($temp, self::TYPE_CURRENT);
@@ -626,7 +627,7 @@ class ArtifactsTest extends TestCase
                 ->setLimit($expectedLimit))
             ->willReturn([]);
         $clientWrapperMock = $this->createMock(ClientWrapper::class);
-        $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
+        $clientWrapperMock->method('getTableAndFileStorageClient')->willReturn($storageClientMock);
 
         $logger = new TestLogger();
         $temp = new Temp();
@@ -704,10 +705,10 @@ class ArtifactsTest extends TestCase
         $storageClientMock
             ->expects(self::once())
             ->method('listFiles')
-            ->with((new ListFilesOptions())->setQuery($expectedQuery))
+            ->with((new ListFilesOptions())->setQuery($expectedQuery)->setLimit(50))
             ->willReturn([]);
         $clientWrapperMock = $this->createMock(ClientWrapper::class);
-        $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
+        $clientWrapperMock->method('getTableAndFileStorageClient')->willReturn($storageClientMock);
 
         $logger = new TestLogger();
         $temp = new Temp();
@@ -779,6 +780,62 @@ class ArtifactsTest extends TestCase
 
         $this->downloadAndAssertShared('default', $orchestrationId, 6);
         $this->downloadAndAssertShared('branch-123', $orchestrationId2, 3);
+    }
+
+    public function testUploadUseBranchStorage(): void
+    {
+        $temp = new Temp();
+        $jobId = (string) rand(0, 999999);
+
+        $client = new Client([
+            'url' => (string) getenv('STORAGE_API_URL'),
+            'token' => (string) getenv('STORAGE_API_TOKEN'),
+        ]);
+        $branchesApi = new DevBranches($client);
+        $branchId = $branchesApi->createBranch(uniqid(__method__))['id'];
+
+        $storageClientWrapper = new ClientWrapper(
+            new ClientOptions(
+                url: (string) getenv('STORAGE_API_URL'),
+                token: (string) getenv('STORAGE_API_TOKEN'),
+                useBranchStorage: true,
+                branchId: (string) $branchId,
+            ),
+        );
+        // upload the artifacts
+        $this->generateArtifacts($temp, self::TYPE_CURRENT);
+        $artifacts = new Artifacts($storageClientWrapper, new NullLogger(), $temp);
+        $uploadedFiles = $artifacts->upload(
+            new Tags(
+                (string) $branchId,
+                'keboola.component',
+                '123',
+                $jobId,
+                null
+            ),
+            []
+        );
+
+        // wait for file to be available in Storage
+        sleep(1);
+
+        $current = array_filter($uploadedFiles, fn ($item) => !$item->isShared());
+        self::assertCount(1, $current);
+        $fileId = $uploadedFiles[0]->getStorageFileId();
+
+        // verify that the file exists in development branch
+        $fileInfo = $storageClientWrapper->getBranchClient()->getFile($fileId);
+        self::assertEquals($fileId, $fileInfo['id']);
+
+        try {
+            // and does not exist in default branch
+            $storageClientWrapper->getClientForDefaultBranch()->getFile($fileId);
+            self::fail('Must throw exception');
+        } catch (ClientException $e) {
+            self::assertStringContainsString('File not found', $e->getMessage());
+        }
+
+        $branchesApi->deleteBranch($branchId);
     }
 
     private function generateAndUploadArtifacts(
