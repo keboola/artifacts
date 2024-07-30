@@ -16,7 +16,7 @@ class TagsTest extends TestCase
             'componentId',
             'configId',
             'jobId',
-            'orchestrationId'
+            'orchestrationId',
         );
         self::assertSame(
             [
@@ -26,7 +26,7 @@ class TagsTest extends TestCase
                 'configId-configId',
                 'jobId-jobId',
             ],
-            $tags->toUploadArray()
+            $tags->toUploadArray(),
         );
     }
 
@@ -37,7 +37,7 @@ class TagsTest extends TestCase
             'componentId',
             'configId',
             'jobId',
-            'orchestrationId'
+            'orchestrationId',
         );
         $tagsMerged = $tags::mergeWithConfiguration(
             $tags,
@@ -45,7 +45,7 @@ class TagsTest extends TestCase
                 'branchId' => 'branchId2',
                 'componentId' => 'componentId2',
                 'configId' => 'configId2',
-            ]
+            ],
         );
         self::assertSame(
             [
@@ -55,7 +55,7 @@ class TagsTest extends TestCase
                 'configId-configId',
                 'jobId-',
             ],
-            $tagsMerged->toUploadArray()
+            $tagsMerged->toUploadArray(),
         );
     }
 }

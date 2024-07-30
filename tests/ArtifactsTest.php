@@ -18,6 +18,7 @@ use Keboola\StorageApi\Options\ListFilesOptions;
 use Keboola\StorageApiBranch\ClientWrapper;
 use Keboola\StorageApiBranch\Factory\ClientOptions;
 use Keboola\Temp\Temp;
+use Monolog\Handler\TestHandler;
 use Monolog\Logger;
 use PHPUnit\Framework\MockObject\Generator\Generator as MockGenerator;
 use PHPUnit\Framework\TestCase;
@@ -50,12 +51,12 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $clientWrapperMock,
             $this->createMock(Logger::class),
-            $temp
+            $temp,
         );
 
         self::assertSame(
             $temp->getTmpFolder() . '/tmp',
-            $artifacts->getFilesystem()->getTmpDir()
+            $artifacts->getFilesystem()->getTmpDir(),
         );
     }
 
@@ -65,7 +66,7 @@ class ArtifactsTest extends TestCase
         array $configuration,
         int $expectedCurrentCount,
         int $expectedSharedCount,
-        bool $zip = true
+        bool $zip = true,
     ): void {
         $temp = new Temp();
         $filesystem = new Filesystem($temp);
@@ -79,7 +80,7 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $storageClientWrapper,
             new NullLogger(),
-            $temp
+            $temp,
         );
         $uploadedFiles = $artifacts->upload(
             new Tags(
@@ -87,9 +88,9 @@ class ArtifactsTest extends TestCase
                 'keboola.component',
                 '123',
                 $jobId,
-                $orchestrationId
+                $orchestrationId,
             ),
-            $configuration
+            $configuration,
         );
 
         $current = array_filter($uploadedFiles, fn ($item) => !$item->isShared());
@@ -103,7 +104,7 @@ class ArtifactsTest extends TestCase
         // current file
         $storageFiles = $storageClientWrapper->getBasicClient()->listFiles(
             (new ListFilesOptions())
-                ->setQuery(sprintf('tags:(jobId-%d* NOT shared)', $jobId))
+                ->setQuery(sprintf('tags:(jobId-%d* NOT shared)', $jobId)),
         );
         self::assertCount($expectedCurrentCount, $storageFiles);
 
@@ -120,7 +121,7 @@ class ArtifactsTest extends TestCase
         // shared file
         $storageFiles = $storageClientWrapper->getBasicClient()->listFiles(
             (new ListFilesOptions())
-                ->setQuery(sprintf('tags:(jobId-%d* AND orchestrationId-%s)', $jobId, $orchestrationId))
+                ->setQuery(sprintf('tags:(jobId-%d* AND orchestrationId-%s)', $jobId, $orchestrationId)),
         );
         self::assertCount($expectedSharedCount, $storageFiles);
 
@@ -170,10 +171,12 @@ class ArtifactsTest extends TestCase
         ];
     }
 
-    public static function uploadExceptionsHandlingData(): iterable
+    public function uploadExceptionsHandlingData(): iterable
     {
+        /** @var Process $processMock */
+        $processMock = $this->getMockBuilder(Process::class)->disableOriginalConstructor()->getMock();
         yield 'ProcessFailedException convert' => [
-            new ProcessFailedException((new MockGenerator)->getMock(Process::class, callOriginalConstructor: false)),
+            new ProcessFailedException($processMock),
             ArtifactsException::class,
             'Error uploading file: The command "" failed.',
         ];
@@ -196,7 +199,7 @@ class ArtifactsTest extends TestCase
     public function testUploadExceptionsHandling(
         Throwable $exception,
         string $expectedException,
-        string $expectedExceptionMessage
+        string $expectedExceptionMessage,
     ): void {
         $storageClientMock = $this->createMock(Client::class);
         $storageClientMock->expects(self::once())
@@ -212,7 +215,7 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $clientWrapperMock,
             new NullLogger(),
-            $temp
+            $temp,
         );
 
         $this->expectException($expectedException);
@@ -222,7 +225,7 @@ class ArtifactsTest extends TestCase
             'keboola.orchestrator',
             '123456',
             '123456789',
-            (string) rand(0, 99999)
+            (string) rand(0, 99999),
         ));
     }
 
@@ -240,14 +243,14 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $clientWrapperMock,
             $this->createMock(Logger::class),
-            $temp
+            $temp,
         );
 
         $results = $artifacts->upload(new Tags(
             'main-branch',
             'keboola.orchestrator',
             '123456',
-            '123456789'
+            '123456789',
         ));
 
         self::assertEmpty($results);
@@ -263,23 +266,25 @@ class ArtifactsTest extends TestCase
         $clientWrapperMock = $this->createMock(ClientWrapper::class);
         $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
 
-        $testLogger = new TestLogger();
+        $testHandler = new TestHandler();
+        $testLogger = new Logger('testLogger');
+        $testLogger->setHandlers([$testHandler]);
 
         $temp = new Temp();
         $artifacts = new Artifacts(
             $clientWrapperMock,
             $testLogger,
-            $temp
+            $temp,
         );
 
         self::assertEmpty($artifacts->upload(new Tags(
             'main-branch',
             'keboola.orchestrator',
             null,
-            '123456789'
+            '123456789',
         )));
-        self::assertTrue($testLogger->hasWarningThatContains(
-            'Ignoring artifacts, configuration Id is not set'
+        self::assertTrue($testHandler->hasWarningThatContains(
+            'Ignoring artifacts, configuration Id is not set',
         ));
     }
 
@@ -289,7 +294,7 @@ class ArtifactsTest extends TestCase
         string $componentId,
         string $configId,
         array $configuration,
-        int $expectedCount
+        int $expectedCount,
     ): void {
         // generate artifacts for a few jobs
         $this->generateAndUploadArtifacts(
@@ -299,7 +304,7 @@ class ArtifactsTest extends TestCase
             null,
             5,
             self::TYPE_CURRENT,
-            $configuration
+            $configuration,
         );
 
         // another branch, config and component
@@ -310,24 +315,23 @@ class ArtifactsTest extends TestCase
             null,
             5,
             self::TYPE_CURRENT,
-            $configuration
+            $configuration,
         );
 
         sleep(1);
 
-        $logger = new TestLogger();
         $temp = new Temp();
         $artifacts = new Artifacts(
             $this->getStorageClientWrapper(),
-            $logger,
-            $temp
+            new NullLogger(),
+            $temp,
         );
 
         $results = $artifacts->download(new Tags(
             $branchId,
             $componentId,
             $configId,
-            (string) rand(0, 999999)
+            (string) rand(0, 999999),
         ), $configuration);
 
         self::assertCount($expectedCount, $results);
@@ -426,7 +430,7 @@ class ArtifactsTest extends TestCase
         string $componentId,
         string $configId,
         array $configuration,
-        array $expectedFiles
+        array $expectedFiles,
     ): void {
         $configuration['artifacts']['options']['zip'] = false;
 
@@ -438,7 +442,7 @@ class ArtifactsTest extends TestCase
             null,
             1,
             self::TYPE_CURRENT,
-            $configuration
+            $configuration,
         );
 
         // another branch, config and component
@@ -449,23 +453,22 @@ class ArtifactsTest extends TestCase
             null,
             1,
             self::TYPE_CURRENT,
-            $configuration
+            $configuration,
         );
 
         sleep(2);
-        $logger = new TestLogger();
         $temp = new Temp();
         $artifacts = new Artifacts(
             $this->getStorageClientWrapper(),
-            $logger,
-            $temp
+            new NullLogger(),
+            $temp,
         );
 
         $result = $artifacts->download(new Tags(
             $branchId,
             $componentId,
             $configId,
-            (string) rand(0, 999999)
+            (string) rand(0, 999999),
         ), $configuration);
 
         self::assertCount(count($expectedFiles), $result);
@@ -582,7 +585,9 @@ class ArtifactsTest extends TestCase
         $clientWrapperMock = $this->createMock(ClientWrapper::class);
         $clientWrapperMock->method('getBasicClient')->willReturn($storageClientMock);
 
-        $testLogger = new TestLogger();
+        $testHandler = new TestHandler();
+        $testLogger = new Logger('testLogger');
+        $testLogger->setHandlers([$testHandler]);
 
         $artifacts = new Artifacts(
             $clientWrapperMock,
@@ -594,10 +599,10 @@ class ArtifactsTest extends TestCase
             'main-branch',
             'keboola.orchestrator',
             null,
-            '123456789'
+            '123456789',
         ), []));
-        self::assertTrue($testLogger->hasWarningThatContains(
-            'Ignoring artifacts, configuration Id is not set'
+        self::assertTrue($testHandler->hasWarningThatContains(
+            'Ignoring artifacts, configuration Id is not set',
         ));
     }
 
@@ -608,14 +613,14 @@ class ArtifactsTest extends TestCase
         string $createdSince,
         string $branchId,
         ?int $limit,
-        int $expectedLimit
+        int $expectedLimit,
     ): void {
         $expectedQuery = sprintf(
             'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s NOT shared) AND created:>%s',
             $branchId,
             'keboola.component',
             '123',
-            (new DateTime($createdSince))->format('Y-m-d')
+            (new DateTime($createdSince))->format('Y-m-d'),
         );
 
         $storageClientMock = $this->createMock(Client::class);
@@ -629,12 +634,11 @@ class ArtifactsTest extends TestCase
         $clientWrapperMock = $this->createMock(ClientWrapper::class);
         $clientWrapperMock->method('getTableAndFileStorageClient')->willReturn($storageClientMock);
 
-        $logger = new TestLogger();
         $temp = new Temp();
         $artifacts = new Artifacts(
             $clientWrapperMock,
-            $logger,
-            $temp
+            new NullLogger(),
+            $temp,
         );
         $configuration = [
             'artifacts' => [
@@ -651,7 +655,7 @@ class ArtifactsTest extends TestCase
             $branchId,
             'keboola.component',
             '123',
-            'job-123'
+            'job-123',
         ), $configuration);
     }
 
@@ -698,7 +702,7 @@ class ArtifactsTest extends TestCase
         $expectedQuery = sprintf(
             'tags:(artifact AND shared AND branchId-%s AND orchestrationId-%s)',
             'default',
-            '99999'
+            '99999',
         );
 
         $storageClientMock = $this->createMock(Client::class);
@@ -710,12 +714,11 @@ class ArtifactsTest extends TestCase
         $clientWrapperMock = $this->createMock(ClientWrapper::class);
         $clientWrapperMock->method('getTableAndFileStorageClient')->willReturn($storageClientMock);
 
-        $logger = new TestLogger();
         $temp = new Temp();
         $artifacts = new Artifacts(
             $clientWrapperMock,
-            $logger,
-            $temp
+            new NullLogger(),
+            $temp,
         );
         $configuration = [
             'artifacts' => [
@@ -729,7 +732,7 @@ class ArtifactsTest extends TestCase
             'keboola.component',
             '123',
             'job-123',
-            '99999'
+            '99999',
         ), $configuration);
     }
 
@@ -745,7 +748,7 @@ class ArtifactsTest extends TestCase
             '123',
             $orchestrationId,
             3,
-            self::TYPE_SHARED
+            self::TYPE_SHARED,
         );
 
         // another config and component
@@ -755,7 +758,7 @@ class ArtifactsTest extends TestCase
             '456',
             $orchestrationId,
             3,
-            self::TYPE_SHARED
+            self::TYPE_SHARED,
         );
 
         // another branch and orchestrationId
@@ -765,7 +768,7 @@ class ArtifactsTest extends TestCase
             '456',
             $orchestrationId2,
             3,
-            self::TYPE_SHARED
+            self::TYPE_SHARED,
         );
 
         // same branch another orchestrationId
@@ -775,7 +778,7 @@ class ArtifactsTest extends TestCase
             '456',
             $orchestrationId2,
             3,
-            self::TYPE_SHARED
+            self::TYPE_SHARED,
         );
 
         $this->downloadAndAssertShared('default', $orchestrationId, 6);
@@ -811,9 +814,9 @@ class ArtifactsTest extends TestCase
                 'keboola.component',
                 '123',
                 $jobId,
-                null
+                null,
             ),
-            []
+            [],
         );
 
         // wait for file to be available in Storage
@@ -845,7 +848,7 @@ class ArtifactsTest extends TestCase
         ?string $orchestrationId,
         int $count,
         string $type = self::TYPE_CURRENT,
-        array $configuration = []
+        array $configuration = [],
     ): void {
         $storageClient = $this->getStorageClientWrapper();
         for ($i=0; $i<$count; $i++) {
@@ -855,14 +858,14 @@ class ArtifactsTest extends TestCase
             $artifacts = new Artifacts(
                 $storageClient,
                 new NullLogger(),
-                $temp
+                $temp,
             );
             $artifacts->upload(new Tags(
                 $branchId,
                 $componentId,
                 $configId,
                 (string) rand(0, 999999),
-                $orchestrationId
+                $orchestrationId,
             ), $configuration);
         }
     }
@@ -898,14 +901,14 @@ class ArtifactsTest extends TestCase
     private function downloadAndAssertShared(
         string $branchId,
         string $orchestrationId,
-        int $count
+        int $count,
     ): void {
-        $logger = new TestLogger();
+        $logger = new NullLogger();
         $temp = new Temp();
         $artifacts = new Artifacts(
             $this->getStorageClientWrapper(),
             $logger,
-            $temp
+            $temp,
         );
         $results = $artifacts->download(
             new Tags(
@@ -913,7 +916,7 @@ class ArtifactsTest extends TestCase
                 'keboola.some-component',
                 'some-config',
                 (string) rand(0, 999999),
-                $orchestrationId
+                $orchestrationId,
             ),
             [
                 'artifacts' => [
@@ -921,7 +924,7 @@ class ArtifactsTest extends TestCase
                         'enabled' => true,
                     ],
                 ],
-            ]
+            ],
         );
 
         self::assertCount($count, $results);
@@ -934,7 +937,7 @@ class ArtifactsTest extends TestCase
         array $storageFile,
         Result $uploadedResult,
         array $tags,
-        bool $unzip = true
+        bool $unzip = true,
     ): void {
         $clientWrapper = $this->getStorageClientWrapper();
 
@@ -997,7 +1000,7 @@ class ArtifactsTest extends TestCase
 
     private function assertFilesAndContentNoZip(
         string $expectedDownloadDir,
-        array $expectedFiles
+        array $expectedFiles,
     ): void {
         // level 1
         $finder = new Finder();

@@ -51,7 +51,7 @@ class StorageFileHelperTest extends TestCase
         );
 
         $this->expectExceptionObject(
-            new ArtifactsException('Missing jobId tag on artifact file "123456"')
+            new ArtifactsException('Missing jobId tag on artifact file "123456"'),
         );
         StorageFileHelper::getJobIdFromFileTag($file);
     }
@@ -71,7 +71,7 @@ class StorageFileHelperTest extends TestCase
         );
 
         $this->expectExceptionObject(
-            new ArtifactsException('There is more than one jobId tag on artifact file "123456"')
+            new ArtifactsException('There is more than one jobId tag on artifact file "123456"'),
         );
         StorageFileHelper::getJobIdFromFileTag($file);
     }
@@ -116,7 +116,7 @@ class StorageFileHelperTest extends TestCase
         $clientWrapper->method('getClientOptionsReadOnly')->willReturn($clientOptionsReadOnly);
         $clientWrapper->method('getBranchId')->willReturn('54321');
         $clientWrapper->method('getDefaultBranch')->willReturn(
-            new Branch('12345', 'default', true, null)
+            new Branch('12345', 'default', true, null),
         );
 
         $files = StorageFileHelper::listFiles(
@@ -393,7 +393,7 @@ class StorageFileHelperTest extends TestCase
             'expectedListFilesOptionsBasic' => (new ListFilesOptions())
                 ->setQuery(
                     'tags:(artifact AND branchId-12345 AND componentId-keboola.component' .
-                    ' AND configId-123 NOT shared) AND created:>2021-01-01'
+                    ' AND configId-123 NOT shared) AND created:>2021-01-01',
                 )
                 ->setLimit(50),
             'expectedListFilesOptionsDefault' => null,
@@ -431,7 +431,7 @@ class StorageFileHelperTest extends TestCase
             'expectedListFilesOptionsBasic' => (new ListFilesOptions())
                 ->setQuery(
                     'tags:(artifact AND branchId-12345 AND componentId-keboola.component ' .
-                    'AND configId-123 NOT shared) AND created:>2021-01-01'
+                    'AND configId-123 NOT shared) AND created:>2021-01-01',
                 )
                 ->setLimit(50),
             'expectedListFilesOptionsDefault' => null,
@@ -448,7 +448,7 @@ class StorageFileHelperTest extends TestCase
             'expectedListFilesOptionsBasic' => (new ListFilesOptions())
                 ->setQuery(
                     'tags:(artifact AND branchId-54321 AND componentId-keboola.component ' .
-                    'AND configId-123 NOT shared) AND created:>2021-01-01'
+                    'AND configId-123 NOT shared) AND created:>2021-01-01',
                 )
                 ->setLimit(50),
             'expectedListFilesOptionsDefault' => null,
@@ -488,7 +488,7 @@ class StorageFileHelperTest extends TestCase
             'expectedListFilesOptionsBasic' => (new ListFilesOptions())
                 ->setQuery(
                     'tags:(artifact AND branchId-54321 AND componentId-keboola.component ' .
-                    'AND configId-123 NOT shared) AND created:>2021-01-01'
+                    'AND configId-123 NOT shared) AND created:>2021-01-01',
                 )
                 ->setLimit(50),
             'expectedListFilesOptionsDefault' => null,
@@ -505,7 +505,7 @@ class StorageFileHelperTest extends TestCase
             'expectedListFilesOptionsBasic' => (new ListFilesOptions())
                 ->setQuery(
                     'tags:(artifact AND branchId-12345 AND componentId-keboola.component ' .
-                    'AND configId-123 NOT shared) AND created:>2021-01-01'
+                    'AND configId-123 NOT shared) AND created:>2021-01-01',
                 )
                 ->setLimit(50),
             'expectedListFilesOptionsDefault' => null,
@@ -543,7 +543,7 @@ class StorageFileHelperTest extends TestCase
             'expectedListFilesOptionsBasic' => (new ListFilesOptions())
                 ->setQuery(
                     'tags:(artifact AND branchId-12345 AND componentId-keboola.component ' .
-                    'AND configId-123 NOT shared) AND created:>2021-01-01'
+                    'AND configId-123 NOT shared) AND created:>2021-01-01',
                 )
                 ->setLimit(50),
             'expectedListFilesOptionsDefault' => null,
@@ -561,14 +561,14 @@ class StorageFileHelperTest extends TestCase
                 // current branch id
                 ->setQuery(
                     'tags:(artifact AND branchId-54321 AND componentId-keboola.component ' .
-                    'AND configId-123 NOT shared) AND created:>2021-01-01'
+                    'AND configId-123 NOT shared) AND created:>2021-01-01',
                 )
                 ->setLimit(50),
             'expectedListFilesOptionsDefault' => (new ListFilesOptions())
                 // default branch id
                 ->setQuery(
                     'tags:(artifact AND branchId-12345 AND componentId-keboola.component ' .
-                    'AND configId-123 NOT shared) AND created:>2021-01-01'
+                    'AND configId-123 NOT shared) AND created:>2021-01-01',
                 )
                 ->setLimit(50),
             'tagsToQueryProcessor' => new TagsToQueryRunsProcessor('2021-01-01'),
@@ -607,7 +607,7 @@ class StorageFileHelperTest extends TestCase
             'expectedListFilesOptionsBasic' => (new ListFilesOptions())
                 ->setQuery(
                     'tags:(artifact AND branchId-54321 AND componentId-keboola.component AND ' .
-                    'configId-123 NOT shared) AND created:>2021-01-01'
+                    'configId-123 NOT shared) AND created:>2021-01-01',
                 )
                 ->setLimit(50),
             'expectedListFilesOptionsDefault' => null,
@@ -648,14 +648,14 @@ class StorageFileHelperTest extends TestCase
                 // current branch id
                 ->setQuery(
                     'tags:(artifact AND branchId-54321 AND componentId-keboola.component ' .
-                    'AND configId-123 NOT shared) AND created:>2021-01-01'
+                    'AND configId-123 NOT shared) AND created:>2021-01-01',
                 )
                 ->setLimit(50),
             'expectedListFilesOptionsDefault' => (new ListFilesOptions())
                 // default branch id
                 ->setQuery(
                     'tags:(artifact AND branchId-12345 AND componentId-keboola.component ' .
-                    'AND configId-123 NOT shared) AND created:>2021-01-01'
+                    'AND configId-123 NOT shared) AND created:>2021-01-01',
                 )
                 ->setLimit(50),
             'tagsToQueryProcessor' => new TagsToQueryRunsProcessor('2021-01-01'),

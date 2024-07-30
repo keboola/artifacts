@@ -28,5 +28,5 @@ print(sprintf(
     $tokenInfo['id'],
     $tokenInfo['owner']['name'],
     $tokenInfo['owner']['id'],
-    $client->getApiUrl()
+    $client->getApiUrl(),
 ));

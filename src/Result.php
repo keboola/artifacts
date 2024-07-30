@@ -8,7 +8,7 @@ class Result
 {
     public function __construct(
         private readonly int $storageFileId,
-        private readonly bool $isShared = false
+        private readonly bool $isShared = false,
     ) {
     }
 
