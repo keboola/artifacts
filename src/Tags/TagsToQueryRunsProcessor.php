@@ -22,7 +22,7 @@ class TagsToQueryRunsProcessor implements TagsToQueryProcessorInterface
             'tags:(artifact AND branchId-%s AND componentId-%s AND configId-%s NOT shared)',
             $tags->getBranchId(),
             $tags->getComponentId(),
-            $tags->getConfigId()
+            $tags->getConfigId(),
         );
 
         if ($this->dateSince) {

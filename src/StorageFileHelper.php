@@ -14,18 +14,18 @@ class StorageFileHelper
     public static function getJobIdFromFileTag(File $file): string
     {
         $jobIds = array_filter($file->tags, function ($tag) {
-            return strstr($tag, 'jobId');
+            return (bool) strstr($tag, 'jobId');
         });
 
         if (empty($jobIds)) {
             throw new ArtifactsException(
-                sprintf('Missing jobId tag on artifact file "%s"', $file->id)
+                sprintf('Missing jobId tag on artifact file "%s"', $file->id),
             );
         }
 
         if (count($jobIds) > 1) {
             throw new ArtifactsException(
-                sprintf('There is more than one jobId tag on artifact file "%s"', $file->id)
+                sprintf('There is more than one jobId tag on artifact file "%s"', $file->id),
             );
         }
 
@@ -36,7 +36,7 @@ class StorageFileHelper
         ClientWrapper $clientWrapper,
         Tags $tags,
         int $limit,
-        TagsToQueryProcessorInterface $tagsToQueryProcessor
+        TagsToQueryProcessorInterface $tagsToQueryProcessor,
     ): array {
         /*
         For fake dev/prod mode, we need to use the default branch client, because there are no files in storage
@@ -81,7 +81,7 @@ class StorageFileHelper
         }
         return array_map(
             fn ($file) => new File((string) $file['id'], $file['name'], $file['tags'], $sourceBranchId),
-            $files
+            $files,
         );
     }
 }

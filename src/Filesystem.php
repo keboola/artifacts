@@ -120,7 +120,7 @@ class Filesystem
         if ($archiveFileInfo->getSize() > $this->getFileSizeLimit()) {
             throw new ArtifactsException(sprintf(
                 'Artifact exceeds maximum allowed size of %s',
-                $this->humanReadableSize($this->getFileSizeLimit())
+                $this->humanReadableSize($this->getFileSizeLimit()),
             ));
         }
     }

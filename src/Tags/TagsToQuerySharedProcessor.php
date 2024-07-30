@@ -13,7 +13,7 @@ class TagsToQuerySharedProcessor implements TagsToQueryProcessorInterface
         return sprintf(
             'tags:(artifact AND shared AND branchId-%s AND orchestrationId-%s)',
             $tags->getBranchId(),
-            $tags->getOrchestrationId()
+            $tags->getOrchestrationId(),
         );
     }
 }

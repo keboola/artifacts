@@ -18,11 +18,11 @@ class TagsToQuerySharedProcessorTest extends TestCase
             'componentId',
             'configId',
             'jobId',
-            'orchestrationId'
+            'orchestrationId',
         ));
         self::assertSame(
             'tags:(artifact AND shared AND branchId-branchId AND orchestrationId-orchestrationId)',
-            $query
+            $query,
         );
     }
 }

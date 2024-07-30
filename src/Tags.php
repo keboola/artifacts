@@ -20,7 +20,7 @@ class Tags
         string $componentId,
         ?string $configId,
         ?string $jobId = null,
-        ?string $orchestrationId = null
+        ?string $orchestrationId = null,
     ) {
         $this->branchId = $branchId;
         $this->componentId = $componentId;

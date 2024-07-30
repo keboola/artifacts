@@ -32,7 +32,7 @@ class Artifacts
     public function __construct(
         ClientWrapper $clientWrapper,
         LoggerInterface $logger,
-        Temp $temp
+        Temp $temp,
     ) {
         $this->clientWrapper = $clientWrapper;
         $this->logger = $logger;
@@ -54,14 +54,14 @@ class Artifacts
         $results = $this->uploadArtifacts(
             $this->filesystem->getUploadCurrentDir(),
             $tags,
-            $configuration
+            $configuration,
         );
 
         if ($tags->getOrchestrationId()) {
             array_push($results, ...$this->uploadArtifacts(
                 $this->filesystem->getUploadSharedDir(),
                 $tags->setIsShared(true),
-                $configuration
+                $configuration,
             ));
         }
 
@@ -95,7 +95,7 @@ class Artifacts
                 $filter['limit'] ?? null,
                 $filter['date_since'] ?? null,
                 self::DOWNLOAD_TYPE_CUSTOM,
-                $isArchive
+                $isArchive,
             );
         }
 
@@ -117,7 +117,7 @@ class Artifacts
         ?int $limit,
         ?string $dateSince,
         string $type,
-        bool $isArchive
+        bool $isArchive,
     ): array {
         if (is_null($tags->getConfigId())) {
             $this->logger->warning('Skipping download of artifacts, configuration Id is not set');
@@ -132,7 +132,7 @@ class Artifacts
             $this->clientWrapper,
             $tags,
             $limit,
-            new TagsToQueryRunsProcessor($dateSince)
+            new TagsToQueryRunsProcessor($dateSince),
         );
 
         $result = [];
@@ -145,7 +145,7 @@ class Artifacts
                 $this->logger->warning(sprintf(
                     'Error downloading run artifact file id "%s": %s',
                     $file->id,
-                    $e->getMessage()
+                    $e->getMessage(),
                 ));
             }
         }
@@ -189,7 +189,7 @@ class Artifacts
                 $this->logger->warning(sprintf(
                     'Error downloading artifact file id "%s": %s',
                     $file->id,
-                    $e->getMessage()
+                    $e->getMessage(),
                 ));
             }
         }
@@ -226,12 +226,12 @@ class Artifacts
 
                 $fileId = $this->clientWrapper->getTableAndFileStorageClient()->uploadFile(
                     $file->getPathname(),
-                    $fileUploadOptions
+                    $fileUploadOptions,
                 );
                 $this->logger->info(sprintf(
                     'Uploaded artifact for job "%s" to file "%s"',
                     $tags->getJobId(),
-                    $fileId
+                    $fileId,
                 ));
                 $results[] = new Result($fileId, $tags->getIsShared());
             }
@@ -251,7 +251,7 @@ class Artifacts
             $this->filesystem->mkdir($dstDir);
             $this->clientWrapper->getClientForBranch($file->sourceBranchId)->downloadFile(
                 $file->id,
-                sprintf('%s/%s', $dstDir, $file->name)
+                sprintf('%s/%s', $dstDir, $file->name),
             );
         }
 
