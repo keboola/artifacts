@@ -47,7 +47,7 @@
     "scripts": {
         "tests": "phpunit",
         "pre-autoload-dump": "Aws\\Script\\Composer\\Composer::removeUnusedServices",
-        "phpstan": "phpstan analyse --no-progress -c phpstan.neon",
+        "phpstan": "phpstan analyse --no-progress -c phpstan.neon --memory-limit=-1",
         "phpcs": "phpcs -n --ignore=vendor --extensions=php .",
         "phpcbf": "phpcbf -n --ignore=vendor --extensions=php .",
         "ci": [
