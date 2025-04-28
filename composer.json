@@ -18,7 +18,7 @@
     "require": {
         "php": ">=8.2",
         "ext-json": "*",
-        "keboola/storage-api-client": "^15.1|^16.0|^17.0",
+        "keboola/storage-api-client": "^15.1|^16.0|^17.0|^18.0",
         "keboola/storage-api-php-client-branch-wrapper": "^6.0",
         "symfony/filesystem": "^6.2|^7.0",
         "symfony/finder": "^6.2|^7.0"
