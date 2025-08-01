@@ -51,9 +51,9 @@ class TagsTest extends TestCase
         self::assertSame(
             [
                 'artifact',
-                'branchId-branchId',
-                'componentId-componentId',
-                'configId-configId',
+                'branchId-branchId2',
+                'componentId-componentId2',
+                'configId-configId2',
                 'jobId-',
             ],
             $tagsMerged->toUploadArray(),
