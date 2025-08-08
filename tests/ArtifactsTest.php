@@ -11,6 +11,14 @@ use Keboola\Artifacts\ArtifactsException;
 use Keboola\Artifacts\Filesystem;
 use Keboola\Artifacts\Result;
 use Keboola\Artifacts\Tags;
+use Keboola\JobQueue\JobConfiguration\JobDefinition\Configuration\Artifacts\Artifacts as ArtifactsConfiguration;
+use Keboola\JobQueue\JobConfiguration\JobDefinition\Configuration\Artifacts\Custom;
+use Keboola\JobQueue\JobConfiguration\JobDefinition\Configuration\Artifacts\CustomFilter;
+use Keboola\JobQueue\JobConfiguration\JobDefinition\Configuration\Artifacts\Options;
+use Keboola\JobQueue\JobConfiguration\JobDefinition\Configuration\Artifacts\Runs;
+use Keboola\JobQueue\JobConfiguration\JobDefinition\Configuration\Artifacts\RunsFilter;
+use Keboola\JobQueue\JobConfiguration\JobDefinition\Configuration\Artifacts\Shared;
+use Keboola\JobQueue\JobConfiguration\JobDefinition\Configuration\Configuration;
 use Keboola\StorageApi\Client;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\DevBranches;
@@ -20,7 +28,6 @@ use Keboola\StorageApiBranch\Factory\ClientOptions;
 use Keboola\Temp\Temp;
 use Monolog\Handler\TestHandler;
 use Monolog\Logger;
-use PHPUnit\Framework\MockObject\Generator\Generator as MockGenerator;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use Psr\Log\Test\TestLogger;
@@ -63,7 +70,7 @@ class ArtifactsTest extends TestCase
     /** @dataProvider uploadProvider */
     public function testUpload(
         ?string $orchestrationId,
-        array $configuration,
+        ArtifactsConfiguration $artifactsConfig,
         int $expectedCurrentCount,
         int $expectedSharedCount,
         bool $zip = true,
@@ -90,7 +97,7 @@ class ArtifactsTest extends TestCase
                 $jobId,
                 $orchestrationId,
             ),
-            $configuration,
+            $artifactsConfig,
         );
 
         $current = array_filter($uploadedFiles, fn ($item) => !$item->isShared());
@@ -144,27 +151,23 @@ class ArtifactsTest extends TestCase
     {
         yield 'orchestrationId set' => [
             'orchestrationId' => (string) rand(0, 999999),
-            'configuration' => [],
+            'artifactsConfig' => new ArtifactsConfiguration,
             'currentFilesCount' => 1,
             'sharedFilesCount' => 1,
         ];
 
         yield 'orchestrationId null' => [
             'orchestrationId' => null,
-            'configuration' => [],
+            'artifactsConfig' => new ArtifactsConfiguration,
             'currentFilesCount' => 1,
             'sharedFilesCount' => 0,
         ];
 
         yield 'no zip' => [
             'orchestrationId' => null,
-            'configuration' => [
-                'artifacts' => [
-                    'options' => [
-                        'zip' => false,
-                    ],
-                ],
-            ],
+            'artifactsConfig' => new ArtifactsConfiguration(
+                options: new Options(zip: false),
+            ),
             'currentFilesCount' => 3,
             'sharedFilesCount' => 0,
             'zip' => false,
@@ -221,12 +224,15 @@ class ArtifactsTest extends TestCase
         $this->expectException($expectedException);
         $this->expectExceptionMessage($expectedExceptionMessage);
 
-        $artifacts->upload(new Tags(
-            'keboola.orchestrator',
-            '123456',
-            '123456789',
-            (string) rand(0, 99999),
-        ));
+        $artifacts->upload(
+            new Tags(
+                'keboola.orchestrator',
+                '123456',
+                '123456789',
+                (string) rand(0, 99999),
+            ),
+            new ArtifactsConfiguration,
+        );
     }
 
     public function testUploadDoNotUploadIfNoFileExists(): void
@@ -246,12 +252,15 @@ class ArtifactsTest extends TestCase
             $temp,
         );
 
-        $results = $artifacts->upload(new Tags(
-            'main-branch',
-            'keboola.orchestrator',
-            '123456',
-            '123456789',
-        ));
+        $results = $artifacts->upload(
+            new Tags(
+                'main-branch',
+                'keboola.orchestrator',
+                '123456',
+                '123456789',
+            ),
+            new ArtifactsConfiguration,
+        );
 
         self::assertEmpty($results);
     }
@@ -277,12 +286,15 @@ class ArtifactsTest extends TestCase
             $temp,
         );
 
-        self::assertEmpty($artifacts->upload(new Tags(
-            'main-branch',
-            'keboola.orchestrator',
-            null,
-            '123456789',
-        )));
+        self::assertEmpty($artifacts->upload(
+            new Tags(
+                'main-branch',
+                'keboola.orchestrator',
+                null,
+                '123456789',
+            ),
+            new ArtifactsConfiguration,
+        ));
         self::assertTrue($testHandler->hasWarningThatContains(
             'Ignoring artifacts, configuration Id is not set',
         ));
@@ -293,7 +305,7 @@ class ArtifactsTest extends TestCase
         string $branchId,
         string $componentId,
         string $configId,
-        array $configuration,
+        ArtifactsConfiguration $artifactsConfig,
         int $expectedCount,
     ): void {
         // generate artifacts for a few jobs
@@ -303,8 +315,7 @@ class ArtifactsTest extends TestCase
             '123',
             null,
             5,
-            self::TYPE_CURRENT,
-            $configuration,
+            $artifactsConfig,
         );
 
         // another branch, config and component
@@ -314,8 +325,7 @@ class ArtifactsTest extends TestCase
             '456',
             null,
             5,
-            self::TYPE_CURRENT,
-            $configuration,
+            $artifactsConfig,
         );
 
         sleep(1);
@@ -332,11 +342,11 @@ class ArtifactsTest extends TestCase
             $componentId,
             $configId,
             (string) rand(0, 999999),
-        ), $configuration);
+        ), $artifactsConfig);
 
         self::assertCount($expectedCount, $results);
 
-        $downloadDir = empty($configuration['artifacts']['custom']['enabled'])
+        $downloadDir = empty($artifactsConfig->custom->enabled)
             ? $artifacts->getFilesystem()->getDownloadRunsDir()
             : $artifacts->getFilesystem()->getDownloadCustomDir();
 
@@ -349,17 +359,15 @@ class ArtifactsTest extends TestCase
             'branch' => 'branch-123',
             'component' => 'keboola.component',
             'configId' => '123',
-            'configuration' => [
-                'artifacts' => [
-                    'runs' => [
-                        'enabled' => true,
-                        'filter' => [
-                            'limit' => 3,
-                            'date_since' => '-1 day',
-                        ],
-                    ],
-                ],
-            ],
+            'artifactsConfig' => new ArtifactsConfiguration(
+                runs: new Runs(
+                    enabled: true,
+                    filter: new RunsFilter(
+                        dateSince: '-1 day',
+                        limit: 3,
+                    ),
+                ),
+            ),
             'expectedCount' => 3,
         ];
 
@@ -367,17 +375,15 @@ class ArtifactsTest extends TestCase
             'branch' => 'default',
             'component' => 'keboola.component-2',
             'configId' => '456',
-            'configuration' => [
-                'artifacts' => [
-                    'runs' => [
-                        'enabled' => true,
-                        'filter' => [
-                            'limit' => 2,
-                            'date_since' => '-1 day',
-                        ],
-                    ],
-                ],
-            ],
+            'artifactsConfig' => new ArtifactsConfiguration(
+                runs: new Runs(
+                    enabled: true,
+                    filter: new RunsFilter(
+                        dateSince: '-1 day',
+                        limit: 2,
+                    ),
+                ),
+            ),
             'expectedCount' => 2,
         ];
 
@@ -385,20 +391,18 @@ class ArtifactsTest extends TestCase
             'branch' => 'branch-3',
             'component' => 'branch-3',
             'config' => '789',
-            'configuration' => [
-                'artifacts' => [
-                    'custom' => [
-                        'enabled' => true,
-                        'filter' => [
-                            'branch_id' => 'default',
-                            'component_id' => 'keboola.component-2',
-                            'config_id' => '456',
-                            'limit' => 3,
-                            'date_since' => '-1 day',
-                        ],
-                    ],
-                ],
-            ],
+            'artifactsConfig' => new ArtifactsConfiguration(
+                custom: new Custom(
+                    enabled: true,
+                    filter: new CustomFilter(
+                        branchId: 'default',
+                        componentId: 'keboola.component-2',
+                        configId: '456',
+                        limit: 3,
+                        dateSince: '-1 day',
+                    ),
+                ),
+            ),
             'expectedCount' => 3,
         ];
 
@@ -406,20 +410,18 @@ class ArtifactsTest extends TestCase
             'branch' => 'default',
             'component' => 'keboola.component',
             'configId' => '999',
-            'configuration' => [
-                'artifacts' => [
-                    'custom' => [
-                        'enabled' => true,
-                        'filter' => [
-                            'branch_id' => 'branch-123',
-                            'component_id' => 'keboola.component',
-                            'config_id' => '123',
-                            'limit' => 2,
-                            'date_since' => '-1 day',
-                        ],
-                    ],
-                ],
-            ],
+            'artifactsConfig' => new ArtifactsConfiguration(
+                custom: new Custom(
+                    enabled: true,
+                    filter: new CustomFilter(
+                        branchId: 'branch-123',
+                        componentId: 'keboola.component',
+                        configId: '123',
+                        limit: 2,
+                        dateSince: '-1 day',
+                    ),
+                ),
+            ),
             'expectedCount' => 2,
         ];
     }
@@ -429,11 +431,9 @@ class ArtifactsTest extends TestCase
         string $branchId,
         string $componentId,
         string $configId,
-        array $configuration,
+        ArtifactsConfiguration $artifactsConfig,
         array $expectedFiles,
     ): void {
-        $configuration['artifacts']['options']['zip'] = false;
-
         // generate artifacts for a few jobs
         $this->generateAndUploadArtifacts(
             'branch-123',
@@ -441,8 +441,7 @@ class ArtifactsTest extends TestCase
             '123',
             null,
             1,
-            self::TYPE_CURRENT,
-            $configuration,
+            $artifactsConfig,
         );
 
         // another branch, config and component
@@ -452,8 +451,7 @@ class ArtifactsTest extends TestCase
             '456',
             null,
             1,
-            self::TYPE_CURRENT,
-            $configuration,
+            $artifactsConfig,
         );
 
         sleep(2);
@@ -469,11 +467,11 @@ class ArtifactsTest extends TestCase
             $componentId,
             $configId,
             (string) rand(0, 999999),
-        ), $configuration);
+        ), $artifactsConfig);
 
         self::assertCount(count($expectedFiles), $result);
 
-        $downloadDir = empty($configuration['artifacts']['custom']['enabled'])
+        $downloadDir = empty($artifactsConfig->custom->enabled)
             ? $artifacts->getFilesystem()->getDownloadRunsDir()
             : $artifacts->getFilesystem()->getDownloadCustomDir();
 
@@ -486,17 +484,16 @@ class ArtifactsTest extends TestCase
             'branch' => 'branch-123',
             'component' => 'keboola.component',
             'configId' => '123',
-            'configuration' => [
-                'artifacts' => [
-                    'runs' => [
-                        'enabled' => true,
-                        'filter' => [
-                            'limit' => 3,
-                            'date_since' => '-1 day',
-                        ],
-                    ],
-                ],
-            ],
+            'artifactsConfig' => new ArtifactsConfiguration(
+                runs: new Runs(
+                    enabled: true,
+                    filter: new RunsFilter(
+                        dateSince: '-1 day',
+                        limit: 3,
+                    ),
+                ),
+                options: new Options(zip: false),
+            ),
             'expectedFiles' => [
                 'file1' => '{"foo":"bar"}',
                 'file2' => '{"foo":"baz"}',
@@ -508,17 +505,16 @@ class ArtifactsTest extends TestCase
             'branch' => 'default',
             'component' => 'keboola.component-2',
             'configId' => '456',
-            'configuration' => [
-                'artifacts' => [
-                    'runs' => [
-                        'enabled' => true,
-                        'filter' => [
-                            'limit' => 2,
-                            'date_since' => '-1 day',
-                        ],
-                    ],
-                ],
-            ],
+            'artifactsConfig' => new ArtifactsConfiguration(
+                runs: new Runs(
+                    enabled: true,
+                    filter: new RunsFilter(
+                        dateSince: '-1 day',
+                        limit: 2,
+                    ),
+                ),
+                options: new Options(zip: false),
+            ),
             'expectedFiles' => [
                 'file2' => '{"foo":"baz"}',
                 'file3' => '{"baz":"bar"}',
@@ -529,20 +525,19 @@ class ArtifactsTest extends TestCase
             'branch' => 'branch-3',
             'component' => 'branch-3',
             'config' => '789',
-            'configuration' => [
-                'artifacts' => [
-                    'custom' => [
-                        'enabled' => true,
-                        'filter' => [
-                            'branch_id' => 'default',
-                            'component_id' => 'keboola.component-2',
-                            'config_id' => '456',
-                            'limit' => 3,
-                            'date_since' => '-1 day',
-                        ],
-                    ],
-                ],
-            ],
+            'artifactsConfig' => new ArtifactsConfiguration(
+                custom: new Custom(
+                    enabled: true,
+                    filter: new CustomFilter(
+                        branchId: 'default',
+                        componentId: 'keboola.component-2',
+                        configId: '456',
+                        limit: 3,
+                        dateSince: '-1 day',
+                    ),
+                ),
+                options: new Options(zip: false),
+            ),
             'expectedFiles' => [
                 'file1' => '{"foo":"bar"}',
                 'file2' => '{"foo":"baz"}',
@@ -554,20 +549,19 @@ class ArtifactsTest extends TestCase
             'branch' => 'default',
             'component' => 'keboola.component',
             'configId' => '999',
-            'configuration' => [
-                'artifacts' => [
-                    'custom' => [
-                        'enabled' => true,
-                        'filter' => [
-                            'branch_id' => 'branch-123',
-                            'component_id' => 'keboola.component',
-                            'config_id' => '123',
-                            'limit' => 2,
-                            'date_since' => '-1 day',
-                        ],
-                    ],
-                ],
-            ],
+            'artifactsConfig' => new ArtifactsConfiguration(
+                custom: new Custom(
+                    enabled: true,
+                    filter: new CustomFilter(
+                        branchId: 'branch-123',
+                        componentId: 'keboola.component',
+                        configId: '123',
+                        limit: 2,
+                        dateSince: '-1 day',
+                    ),
+                ),
+                options: new Options(zip: false),
+            ),
             'expectedFiles' => [
                 'file2' => '{"foo":"baz"}',
                 'file3' => '{"baz":"bar"}',
@@ -600,7 +594,7 @@ class ArtifactsTest extends TestCase
             'keboola.orchestrator',
             null,
             '123456789',
-        ), []));
+        ), new ArtifactsConfiguration));
         self::assertTrue($testHandler->hasWarningThatContains(
             'Ignoring artifacts, configuration Id is not set',
         ));
@@ -640,23 +634,21 @@ class ArtifactsTest extends TestCase
             new NullLogger(),
             $temp,
         );
-        $configuration = [
-            'artifacts' => [
-                'runs' => [
-                    'enabled' => true,
-                    'filter' => [
-                        'limit' => $limit,
-                        'date_since' => $createdSince,
-                    ],
-                ],
-            ],
-        ];
+        $artifactsConfiguration = new ArtifactsConfiguration(
+            runs: new Runs(
+                enabled: true,
+                filter: new RunsFilter(
+                    dateSince: $createdSince,
+                    limit: $limit,
+                ),
+            ),
+        );
         $artifacts->download(new Tags(
             $branchId,
             'keboola.component',
             '123',
             'job-123',
-        ), $configuration);
+        ), $artifactsConfiguration);
     }
 
     public static function downloadRunsDateSinceProvider(): Generator
@@ -720,20 +712,16 @@ class ArtifactsTest extends TestCase
             new NullLogger(),
             $temp,
         );
-        $configuration = [
-            'artifacts' => [
-                'shared' => [
-                    'enabled' => true,
-                ],
-            ],
-        ];
+        $artifactsConfiguration = new ArtifactsConfiguration(
+            shared: new Shared(enabled: true),
+        );
         $artifacts->download(new Tags(
             'default',
             'keboola.component',
             '123',
             'job-123',
             '99999',
-        ), $configuration);
+        ), $artifactsConfiguration);
     }
 
     public function testDownloadShared(): void
@@ -748,6 +736,7 @@ class ArtifactsTest extends TestCase
             '123',
             $orchestrationId,
             3,
+            new ArtifactsConfiguration,
             self::TYPE_SHARED,
         );
 
@@ -758,6 +747,7 @@ class ArtifactsTest extends TestCase
             '456',
             $orchestrationId,
             3,
+            new ArtifactsConfiguration,
             self::TYPE_SHARED,
         );
 
@@ -768,6 +758,7 @@ class ArtifactsTest extends TestCase
             '456',
             $orchestrationId2,
             3,
+            new ArtifactsConfiguration,
             self::TYPE_SHARED,
         );
 
@@ -778,6 +769,7 @@ class ArtifactsTest extends TestCase
             '456',
             $orchestrationId2,
             3,
+            new ArtifactsConfiguration,
             self::TYPE_SHARED,
         );
 
@@ -816,7 +808,7 @@ class ArtifactsTest extends TestCase
                 $jobId,
                 null,
             ),
-            [],
+            new ArtifactsConfiguration,
         );
 
         // wait for file to be available in Storage
@@ -847,8 +839,8 @@ class ArtifactsTest extends TestCase
         string $configId,
         ?string $orchestrationId,
         int $count,
+        ArtifactsConfiguration $artifactsConfig,
         string $type = self::TYPE_CURRENT,
-        array $configuration = [],
     ): void {
         $storageClient = $this->getStorageClientWrapper();
         for ($i=0; $i<$count; $i++) {
@@ -866,7 +858,7 @@ class ArtifactsTest extends TestCase
                 $configId,
                 (string) rand(0, 999999),
                 $orchestrationId,
-            ), $configuration);
+            ), $artifactsConfig);
         }
     }
 
@@ -918,13 +910,9 @@ class ArtifactsTest extends TestCase
                 (string) rand(0, 999999),
                 $orchestrationId,
             ),
-            [
-                'artifacts' => [
-                    'shared' => [
-                        'enabled' => true,
-                    ],
-                ],
-            ],
+            new ArtifactsConfiguration(
+                shared: new Shared(enabled: true),
+            ),
         );
 
         self::assertCount($count, $results);

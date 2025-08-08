@@ -6,9 +6,9 @@ namespace Keboola\Artifacts;
 
 use Keboola\Artifacts\Tags\TagsToQueryRunsProcessor;
 use Keboola\Artifacts\Tags\TagsToQuerySharedProcessor;
+use Keboola\JobQueue\JobConfiguration\JobDefinition\Configuration\Artifacts\Artifacts as ArtifactsConfiguration;
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\FileUploadOptions;
-use Keboola\StorageApi\Options\ListFilesOptions;
 use Keboola\StorageApiBranch\ClientWrapper;
 use Keboola\Temp\Temp;
 use Psr\Log\LoggerInterface;
@@ -45,7 +45,7 @@ class Artifacts
     }
 
     /** @return Result[] */
-    public function upload(Tags $tags, array $configuration = []): array
+    public function upload(Tags $tags, ArtifactsConfiguration $artifactsConfig): array
     {
         if (!$this->checkConfigId($tags)) {
             return [];
@@ -54,14 +54,14 @@ class Artifacts
         $results = $this->uploadArtifacts(
             $this->filesystem->getUploadCurrentDir(),
             $tags,
-            $configuration,
+            $artifactsConfig,
         );
 
         if ($tags->getOrchestrationId()) {
             array_push($results, ...$this->uploadArtifacts(
                 $this->filesystem->getUploadSharedDir(),
                 $tags->setIsShared(true),
-                $configuration,
+                $artifactsConfig,
             ));
         }
 
@@ -69,41 +69,41 @@ class Artifacts
     }
 
     /** @return Result[] */
-    public function download(Tags $tags, array $configuration): array
+    public function download(Tags $tags, ArtifactsConfiguration $artifactsConfig): array
     {
         if (!$this->checkConfigId($tags)) {
             return [];
         }
 
-        $isArchive = $configuration['artifacts']['options']['zip'] ?? self::ZIP_DEFAULT;
+        $isArchive = $artifactsConfig->options->zip ?? self::ZIP_DEFAULT;
 
-        if (!empty($configuration['artifacts']['runs']['enabled'])) {
-            $filter = $configuration['artifacts']['runs']['filter'];
+        if (!empty($artifactsConfig->runs->enabled)) {
+            $filter = $artifactsConfig->runs->filter;
             return $this->downloadRuns(
                 Tags::mergeWithConfiguration($tags, $filter),
-                $filter['limit'] ?? null,
-                $filter['date_since'] ?? null,
+                $filter->limit ?? null,
+                $filter->dateSince ?? null,
                 self::DOWNLOAD_TYPE_RUNS,
                 $isArchive,
             );
         }
 
-        if (!empty($configuration['artifacts']['custom']['enabled'])) {
-            $filter = $configuration['artifacts']['custom']['filter'];
+        if (!empty($artifactsConfig->custom->enabled)) {
+            $filter = $artifactsConfig->custom->filter;
             return $this->downloadRuns(
                 Tags::mergeWithConfiguration($tags, $filter),
-                $filter['limit'] ?? null,
-                $filter['date_since'] ?? null,
+                $filter->limit ?? null,
+                $filter->dateSince ?? null,
                 self::DOWNLOAD_TYPE_CUSTOM,
                 $isArchive,
             );
         }
 
-        if (!empty($configuration['artifacts']['shared']['enabled'])) {
-            $filter = $configuration['artifacts']['custom']['filter'];
+        if (!empty($artifactsConfig->shared->enabled)) {
+            $filter = $artifactsConfig->custom->filter;
             return $this->downloadShared(
                 $tags->setIsShared(true),
-                $filter['limit'] ?? null,
+                $filter->limit ?? null,
                 $isArchive,
             );
         }
@@ -198,7 +198,7 @@ class Artifacts
     }
 
     /** @return Result[] */
-    private function uploadArtifacts(string $directory, Tags $tags, array $configuration): array
+    private function uploadArtifacts(string $directory, Tags $tags, ArtifactsConfiguration $artifactsConfig): array
     {
         $finder = new Finder();
         $count = $finder->in($directory)->count();
@@ -208,7 +208,7 @@ class Artifacts
 
         try {
             $results = [];
-            if ($configuration['artifacts']['options']['zip'] ?? self::ZIP_DEFAULT) {
+            if ($artifactsConfig->options->zip ?? self::ZIP_DEFAULT) {
                 $this->filesystem->archiveDir($directory, $this->filesystem->getArchivePath());
                 $this->filesystem->checkFileSize($this->filesystem->getArchivePath());
                 $files[] = new SplFileInfo($this->filesystem->getArchivePath());

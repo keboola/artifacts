@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Keboola\Artifacts;
 
 use DateTime;
+use Keboola\JobQueue\JobConfiguration\JobDefinition\Configuration\Artifacts\CustomFilter;
+use Keboola\JobQueue\JobConfiguration\JobDefinition\Configuration\Artifacts\RunsFilter;
 
 class Tags
 {
@@ -65,12 +67,12 @@ class Tags
         return $this->isShared;
     }
 
-    public static function mergeWithConfiguration(Tags $tags, array $filter): self
+    public static function mergeWithConfiguration(Tags $tags, RunsFilter|CustomFilter $filter): self
     {
         return new self(
-            $filter['branch_id'] ?? $tags->getBranchId(),
-            $filter['component_id'] ?? $tags->getComponentId(),
-            $filter['config_id'] ?? $tags->getConfigId(),
+            $filter->branchId ?? $tags->getBranchId(),
+            $filter->componentId ?? $tags->getComponentId(),
+            $filter->configId ?? $tags->getConfigId(),
         );
     }
 

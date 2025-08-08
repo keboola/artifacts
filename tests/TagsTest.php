@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Keboola\Artifacts\Tests;
 
 use Keboola\Artifacts\Tags;
+use Keboola\JobQueue\JobConfiguration\JobDefinition\Configuration\Artifacts\CustomFilter;
 use PHPUnit\Framework\TestCase;
 
 class TagsTest extends TestCase
@@ -41,18 +42,18 @@ class TagsTest extends TestCase
         );
         $tagsMerged = $tags::mergeWithConfiguration(
             $tags,
-            [
-                'branchId' => 'branchId2',
-                'componentId' => 'componentId2',
-                'configId' => 'configId2',
-            ],
+            new CustomFilter(
+                componentId: 'componentId2',
+                configId: 'configId2',
+                branchId: 'branchId2',
+            ),
         );
         self::assertSame(
             [
                 'artifact',
-                'branchId-branchId',
-                'componentId-componentId',
-                'configId-configId',
+                'branchId-branchId2',
+                'componentId-componentId2',
+                'configId-configId2',
                 'jobId-',
             ],
             $tagsMerged->toUploadArray(),
