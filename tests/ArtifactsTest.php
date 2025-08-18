@@ -58,7 +58,8 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $clientWrapperMock,
             $this->createMock(Logger::class),
-            $temp,
+            $temp->getTmpFolder() . '/tmp',
+            $temp->getTmpFolder() . '/data',
         );
 
         self::assertSame(
@@ -76,7 +77,7 @@ class ArtifactsTest extends TestCase
         bool $zip = true,
     ): void {
         $temp = new Temp();
-        $filesystem = new Filesystem($temp);
+        $filesystem = new Filesystem($temp->getTmpFolder() . '/tmp', $temp->getTmpFolder() . '/data');
         $jobId = (string) rand(0, 999999);
         $storageClientWrapper = $this->getStorageClientWrapper();
 
@@ -87,7 +88,8 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $storageClientWrapper,
             new NullLogger(),
-            $temp,
+            $temp->getTmpFolder() . '/tmp',
+            $temp->getTmpFolder() . '/data',
         );
         $uploadedFiles = $artifacts->upload(
             new Tags(
@@ -218,7 +220,8 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $clientWrapperMock,
             new NullLogger(),
-            $temp,
+            $temp->getTmpFolder() . '/tmp',
+            $temp->getTmpFolder() . '/data',
         );
 
         $this->expectException($expectedException);
@@ -249,7 +252,8 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $clientWrapperMock,
             $this->createMock(Logger::class),
-            $temp,
+            $temp->getTmpFolder() . '/tmp',
+            $temp->getTmpFolder() . '/data',
         );
 
         $results = $artifacts->upload(
@@ -283,7 +287,8 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $clientWrapperMock,
             $testLogger,
-            $temp,
+            $temp->getTmpFolder() . '/tmp',
+            $temp->getTmpFolder() . '/data',
         );
 
         self::assertEmpty($artifacts->upload(
@@ -334,7 +339,8 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $this->getStorageClientWrapper(),
             new NullLogger(),
-            $temp,
+            $temp->getTmpFolder() . '/tmp',
+            $temp->getTmpFolder() . '/data',
         );
 
         $results = $artifacts->download(new Tags(
@@ -459,7 +465,8 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $this->getStorageClientWrapper(),
             new NullLogger(),
-            $temp,
+            $temp->getTmpFolder() . '/tmp',
+            $temp->getTmpFolder() . '/data',
         );
 
         $result = $artifacts->download(new Tags(
@@ -583,10 +590,13 @@ class ArtifactsTest extends TestCase
         $testLogger = new Logger('testLogger');
         $testLogger->setHandlers([$testHandler]);
 
+        $temp = new Temp();
+
         $artifacts = new Artifacts(
             $clientWrapperMock,
             $testLogger,
-            new Temp(),
+            $temp->getTmpFolder() . '/tmp',
+            $temp->getTmpFolder() . '/data',
         );
 
         self::assertEmpty($artifacts->download(new Tags(
@@ -632,7 +642,8 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $clientWrapperMock,
             new NullLogger(),
-            $temp,
+            $temp->getTmpFolder() . '/tmp',
+            $temp->getTmpFolder() . '/data',
         );
         $artifactsConfiguration = new ArtifactsConfiguration(
             runs: new Runs(
@@ -710,7 +721,8 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $clientWrapperMock,
             new NullLogger(),
-            $temp,
+            $temp->getTmpFolder() . '/tmp',
+            $temp->getTmpFolder() . '/data',
         );
         $artifactsConfiguration = new ArtifactsConfiguration(
             shared: new Shared(enabled: true),
@@ -799,7 +811,12 @@ class ArtifactsTest extends TestCase
         );
         // upload the artifacts
         $this->generateArtifacts($temp, self::TYPE_CURRENT);
-        $artifacts = new Artifacts($storageClientWrapper, new NullLogger(), $temp);
+        $artifacts = new Artifacts(
+            $storageClientWrapper,
+            new NullLogger(),
+            $temp->getTmpFolder() . '/tmp',
+            $temp->getTmpFolder() . '/data',
+        );
         $uploadedFiles = $artifacts->upload(
             new Tags(
                 (string) $branchId,
@@ -850,7 +867,8 @@ class ArtifactsTest extends TestCase
             $artifacts = new Artifacts(
                 $storageClient,
                 new NullLogger(),
-                $temp,
+                $temp->getTmpFolder() . '/tmp',
+                $temp->getTmpFolder() . '/data',
             );
             $artifacts->upload(new Tags(
                 $branchId,
@@ -864,7 +882,7 @@ class ArtifactsTest extends TestCase
 
     private function generateArtifacts(Temp $temp, string $type): void
     {
-        $artifactsFs = new Filesystem($temp);
+        $artifactsFs = new Filesystem($temp->getTmpFolder() . '/tmp', $temp->getTmpFolder() . '/data');
 
         $uploadDir = $artifactsFs->getUploadCurrentDir();
         if ($type === self::TYPE_SHARED) {
@@ -900,7 +918,8 @@ class ArtifactsTest extends TestCase
         $artifacts = new Artifacts(
             $this->getStorageClientWrapper(),
             $logger,
-            $temp,
+            $temp->getTmpFolder() . '/tmp',
+            $temp->getTmpFolder() . '/data',
         );
         $results = $artifacts->download(
             new Tags(

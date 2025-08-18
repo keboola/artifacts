@@ -10,7 +10,6 @@ use Keboola\JobQueue\JobConfiguration\JobDefinition\Configuration\Artifacts\Arti
 use Keboola\StorageApi\ClientException;
 use Keboola\StorageApi\Options\FileUploadOptions;
 use Keboola\StorageApiBranch\ClientWrapper;
-use Keboola\Temp\Temp;
 use Psr\Log\LoggerInterface;
 use SplFileInfo;
 use Symfony\Component\Finder\Finder;
@@ -32,11 +31,12 @@ class Artifacts
     public function __construct(
         ClientWrapper $clientWrapper,
         LoggerInterface $logger,
-        Temp $temp,
+        string $tmpDirPath,
+        string $dataDirPath,
     ) {
         $this->clientWrapper = $clientWrapper;
         $this->logger = $logger;
-        $this->filesystem = new Filesystem($temp);
+        $this->filesystem = new Filesystem($tmpDirPath, $dataDirPath);
     }
 
     public function getFilesystem(): Filesystem
