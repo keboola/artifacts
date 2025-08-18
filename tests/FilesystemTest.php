@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts\Tests;
 
+use InvalidArgumentException;
 use Keboola\Artifacts\ArtifactsException;
 use Keboola\Artifacts\Filesystem;
 use Keboola\Artifacts\Filesystem as ArtifactsFilesystem;
@@ -16,7 +17,7 @@ class FilesystemTest extends TestCase
     public function testFilesystemInitsDirectoriesStructure(): void
     {
         $temp = new Temp();
-        $artifactsFilesystem = new ArtifactsFilesystem($temp);
+        $artifactsFilesystem = new ArtifactsFilesystem($temp->getTmpFolder() . '/tmp', $temp->getTmpFolder() . '/data');
 
         $path = $artifactsFilesystem->getTmpDir();
         self::assertDirectoryExists($path);
@@ -99,7 +100,7 @@ class FilesystemTest extends TestCase
     public function testArchiveAndExtractDir(): void
     {
         $temp = new Temp();
-        $artifactsFilesystem = new ArtifactsFilesystem($temp);
+        $artifactsFilesystem = new ArtifactsFilesystem($temp->getTmpFolder() . '/tmp', $temp->getTmpFolder() . '/data');
 
         mkdir($artifactsFilesystem->getUploadCurrentDir() . '/test');
         touch($artifactsFilesystem->getUploadCurrentDir() . '/test1.txt');
@@ -145,7 +146,7 @@ class FilesystemTest extends TestCase
     public function testGetFileSize(): void
     {
         $temp = new Temp();
-        $artifactsFilesystem = new ArtifactsFilesystem($temp);
+        $artifactsFilesystem = new ArtifactsFilesystem($temp->getTmpFolder() . '/tmp', $temp->getTmpFolder() . '/data');
 
         self::assertEquals(2**30, $artifactsFilesystem->getFileSizeLimit());
     }
@@ -154,7 +155,7 @@ class FilesystemTest extends TestCase
     {
         $temp = new Temp();
         $filesystemMock = $this->getMockBuilder(Filesystem::class)
-            ->setConstructorArgs([$temp])
+            ->setConstructorArgs([$temp->getTmpFolder() . '/tmp', $temp->getTmpFolder() . '/data'])
             ->onlyMethods(['getFileSizeLimit'])
             ->getMock()
         ;
@@ -171,5 +172,79 @@ class FilesystemTest extends TestCase
         $this->expectExceptionMessage('Artifact exceeds maximum allowed size of 5.00 B');
 
         $filesystemMock->checkFileSize($filesystemMock->getArchivePath());
+    }
+
+    /** @dataProvider directoryPathsDataProvider */
+    public function testDirectoryPaths(
+        string $tmpDirSuffix,
+        string $dataDirSuffix,
+        string $assertDescription,
+    ): void {
+        $temp = new Temp();
+
+        $tmpDir = $temp->getTmpFolder() . '/tmp' . $tmpDirSuffix;
+        $dataDir = $temp->getTmpFolder() . '/data' . $dataDirSuffix;
+
+        $artifactsFilesystem = new ArtifactsFilesystem($tmpDir, $dataDir);
+
+        self::assertSame(
+            $temp->getTmpFolder() . '/tmp',
+            $artifactsFilesystem->getTmpDir(),
+            $assertDescription . ' - tmp directory path.',
+        );
+
+        self::assertSame(
+            $temp->getTmpFolder() . '/data',
+            $artifactsFilesystem->getDataDir(),
+            $assertDescription . ' - data directory path.',
+        );
+    }
+
+    public static function directoryPathsDataProvider(): iterable
+    {
+        yield 'paths with trailing slashes' => [
+            'tmpDirSuffix' => '/',
+            'dataDirSuffix' => '/',
+            'assertDescription' => 'Trailing slash should be removed from directory paths',
+        ];
+
+        yield 'paths without trailing slashes' => [
+            'tmpDirSuffix' => '',
+            'dataDirSuffix' => '',
+            'assertDescription' => 'Paths without trailing slashes should remain unchanged',
+        ];
+    }
+
+    /** @dataProvider validateDirectoryPathsDataProvider */
+    public function testValidateDirectoryPaths(
+        string $tmpDir,
+        string $dataDir,
+        string $expectedMessage,
+    ): void {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage($expectedMessage);
+
+        new ArtifactsFilesystem($tmpDir, $dataDir);
+    }
+
+    public static function validateDirectoryPathsDataProvider(): iterable
+    {
+        yield 'empty tmp directory path' => [
+            'tmpDir' => '',
+            'dataDir' => '/some/data/path',
+            'expectedMessage' => 'Temporary and data directory paths must not be empty.',
+        ];
+
+        yield 'empty data directory path' => [
+            'tmpDir' => '/some/tmp/path',
+            'dataDir' => '',
+            'expectedMessage' => 'Temporary and data directory paths must not be empty.',
+        ];
+
+        yield 'both empty paths' => [
+            'tmpDir' => '',
+            'dataDir' => '',
+            'expectedMessage' => 'Temporary and data directory paths must not be empty.',
+        ];
     }
 }

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Keboola\Artifacts;
 
-use Keboola\Temp\Temp;
+use InvalidArgumentException;
 use SplFileInfo;
 use Symfony\Component\Filesystem\Filesystem as SymfonyFilesystem;
 use Symfony\Component\Process\Process;
@@ -25,11 +25,18 @@ class Filesystem
     private SymfonyFilesystem $filesystem;
     private int $fileSizeLimit;
 
-    public function __construct(Temp $temp)
+    public function __construct(string $tmpDirPath, string $dataDirPath)
     {
-        $this->tmpDir = $temp->getTmpFolder() . '/tmp';
-        $this->dataDir = $temp->getTmpFolder() . '/data';
-        $this->archivePath = $temp->getTmpFolder() . '/tmp/artifacts.tar.gz';
+        $this->tmpDir = rtrim($tmpDirPath, '/');
+        $this->dataDir = rtrim($dataDirPath, '/');
+
+        if ($tmpDirPath === '' || $dataDirPath === '') {
+            throw new InvalidArgumentException(
+                'Temporary and data directory paths must not be empty.',
+            );
+        }
+
+        $this->archivePath = $this->tmpDir . '/artifacts.tar.gz';
         $this->artifactsDir = $this->dataDir . '/artifacts';
         $this->uploadDir = $this->artifactsDir . '/out';
         $this->uploadCurrentDir = $this->uploadDir . '/current';
